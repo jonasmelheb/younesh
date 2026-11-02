@@ -5,7 +5,7 @@ const os = require('os');
 const pty = require('@lydell/node-pty');
 
 const isWin = process.platform === 'win32';
-const storePath = () => path.join(app.getPath('userData'), 'tiroir.json');
+const storePath = () => path.join(app.getPath('userData'), 'younesh.json');
 const ptys = new Map();
 let win;
 
@@ -19,7 +19,7 @@ function createWindow() {
     minWidth: 640,
     minHeight: 400,
     backgroundColor: '#0e0f13',
-    title: 'Tiroir',
+    title: 'Younesh',
     icon: path.join(__dirname, 'build', 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: isWin ? { color: '#0e0f13', symbolColor: '#c9ccd6', height: 38 } : undefined,
@@ -108,7 +108,7 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
     cols: cols || 80,
     rows: rows || 24,
     cwd: dir,
-    env: { ...process.env, TERM_PROGRAM: 'Tiroir', COLORTERM: 'truecolor' },
+    env: { ...process.env, TERM_PROGRAM: 'Younesh', COLORTERM: 'truecolor' },
     useConpty: isWin ? true : undefined,
   });
   ptys.set(id, term);

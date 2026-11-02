@@ -21,11 +21,11 @@ jobs:
       - run: npm run dist
       - uses: actions/upload-artifact@v4
         with:
-          name: Tiroir-windows
+          name: Younesh-windows
           path: dist/*.exe
       - name: Publier la version
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.exe --title "Tiroir $GITHUB_REF_NAME" --notes "Télécharge **Tiroir-Setup** (installation) ou **Tiroir-Portable** (sans installation)."
+        run: gh release create "$GITHUB_REF_NAME" dist/*.exe --title "Younesh $GITHUB_REF_NAME" --notes "Télécharge **Younesh-Setup** (installation) ou **Younesh-Portable** (sans installation)."

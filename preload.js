@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer, clipboard } = require('electron');
 
-contextBridge.exposeInMainWorld('tiroir', {
+contextBridge.exposeInMainWorld('younesh', {
   loadStore: () => ipcRenderer.invoke('store:load'),
   saveStore: (data) => ipcRenderer.invoke('store:save', data),
   listShells: () => ipcRenderer.invoke('shells:list'),

@@ -1,6 +1,6 @@
 'use strict';
 
-const api = window.tiroir;
+const api = window.younesh;
 const $ = (sel) => document.querySelector(sel);
 
 const COLORS = ['#ff6b6b', '#ff9f43', '#feca57', '#4ade80', '#2dd4bf', '#38bdf8', '#7c9cff', '#a78bfa', '#f472b6', '#e8a87c', '#94a3b8'];
@@ -474,7 +474,7 @@ function updateTopbar() {
   $('#active-path').textContent = s ? shortPath(s.cwd) : '';
   $('#active-dot').style.visibility = s ? 'visible' : 'hidden';
   if (s) setDot($('#active-dot'), s.id);
-  document.title = s ? `${s.name} — Tiroir` : 'Tiroir';
+  document.title = s ? `${s.name} — Younesh` : 'Younesh';
 }
 
 function startRename(type, id) {
@@ -771,7 +771,7 @@ function sessionForm(s, title, submitLabel) {
       <label class="field"><span>Ranger dans</span><select name="folderId">${folderOptions}</select></label>
       <label class="field" data-for="shell"><span>Commande au démarrage (facultatif)</span><input name="command" value="${esc(s.command)}" placeholder="ex. npm run dev" spellcheck="false"></label>
       <label class="field" data-for="claude"><span>Options Claude (facultatif)</span><input name="claudeArgs" value="${esc(s.claudeArgs)}" placeholder="ex. --model opus" spellcheck="false">
-        <small>La conversation Claude est liée à cette discussion : elle reprend là où tu t'étais arrêté, même après avoir fermé Tiroir.</small></label>
+        <small>La conversation Claude est liée à cette discussion : elle reprend là où tu t'étais arrêté, même après avoir fermé Younesh.</small></label>
       <div class="field" data-for="sandbox"><span>Sandbox</span>
         <small>${settings().sandboxCommand ? `Lance : <code>${esc(settings().sandboxCommand)}</code>` : 'Pas encore configurée : clic droit sur le bouton Sandbox pour la régler.'}</small></div>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">${submitLabel}</button></div>

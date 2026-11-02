@@ -1,14 +1,14 @@
 <p align="center"><img src="build/icon.png" width="96" alt=""></p>
 
-# Tiroir
+# Younesh
 
 Un terminal pour Windows où chaque discussion est rangée à gauche, dans des dossiers de couleur.
 
 ## Installer sur Windows
 
 1. Ouvre la page **Releases** du dépôt et télécharge :
-   - `Tiroir-Setup-x.y.z.exe` pour l'installer (raccourci dans le menu Démarrer),
-   - ou `Tiroir-Portable-x.y.z.exe` pour le lancer sans installation.
+   - `Younesh-Setup-x.y.z.exe` pour l'installer (raccourci dans le menu Démarrer),
+   - ou `Younesh-Portable-x.y.z.exe` pour le lancer sans installation.
 2. L'app n'est pas signée, donc Windows affiche « Windows a protégé votre ordinateur ». Clique sur **Informations complémentaires**, puis **Exécuter quand même**.
 
 ## Ce que ça fait
@@ -16,7 +16,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 - **Discussions à gauche** : chaque terminal est une discussion avec un nom, un dossier de travail et un shell (PowerShell 7, Windows PowerShell, Invite de commandes, Git Bash ou WSL, détectés automatiquement).
 - **Dossiers de couleur** : crée des dossiers, choisis leur couleur (palette ou couleur libre), replie-les, renomme-les avec un double-clic. Une discussion peut aussi avoir sa propre couleur.
 - **Glisser-déposer** : range une discussion dans un dossier, change l'ordre des discussions ou des dossiers.
-- **Discussions Claude Code** : le bouton ✳ Claude lance `claude` dans le dossier choisi. Chaque discussion garde sa propre conversation, qui reprend là où tu t'étais arrêté, même après avoir fermé Tiroir.
+- **Discussions Claude Code** : le bouton ✳ Claude lance `claude` dans le dossier choisi. Chaque discussion garde sa propre conversation, qui reprend là où tu t'étais arrêté, même après avoir fermé Younesh.
 - **Sandbox** : le bouton ⧉ ouvre une discussion dans ta sandbox. Clic droit pour régler la commande (`{dossier}` est remplacé par le dossier de travail).
 - **Commande au démarrage** : par exemple `npm run dev` pour un serveur qui se relance d'un clic.
 - **Pastilles** : vert = en cours, bleu = nouvelle activité, rouge = terminé, gris = en veille (démarre au clic).

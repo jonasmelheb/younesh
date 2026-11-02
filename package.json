@@ -1,6 +1,6 @@
 {
-  "name": "tiroir",
-  "version": "1.0.0",
+  "name": "younesh",
+  "version": "1.1.0",
   "description": "Terminal pour Windows avec les discussions rangées dans des dossiers de couleur",
   "main": "main.js",
   "scripts": {
@@ -24,8 +24,8 @@
     "electron-winstaller@5.4.0": true
   },
   "build": {
-    "appId": "com.jonasmelheb.tiroir",
-    "productName": "Tiroir",
+    "appId": "com.jonasmelheb.younesh",
+    "productName": "Younesh",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -63,11 +63,11 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "artifactName": "Tiroir-Setup-${version}.${ext}",
-      "shortcutName": "Tiroir"
+      "artifactName": "Younesh-Setup-${version}.${ext}",
+      "shortcutName": "Younesh"
     },
     "portable": {
-      "artifactName": "Tiroir-Portable-${version}.${ext}"
+      "artifactName": "Younesh-Portable-${version}.${ext}"
     }
   }
 }
