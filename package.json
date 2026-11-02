@@ -1,0 +1,73 @@
+{
+  "name": "tiroir",
+  "version": "1.0.0",
+  "description": "Terminal pour Windows avec les discussions rangées dans des dossiers de couleur",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 --publish never"
+  },
+  "author": "Y",
+  "license": "MIT",
+  "dependencies": {
+    "@lydell/node-pty": "1.2.0-beta.18",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/addon-web-links": "0.11.0",
+    "@xterm/xterm": "5.5.0"
+  },
+  "devDependencies": {
+    "electron": "38.8.6",
+    "electron-builder": "26.0.12"
+  },
+  "allowScripts": {
+    "electron@38.8.6": true,
+    "electron-winstaller@5.4.0": true
+  },
+  "build": {
+    "appId": "com.jonasmelheb.tiroir",
+    "productName": "Tiroir",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "build/icon.png",
+      "!node_modules/@xterm/*/src/**",
+      "!node_modules/**/*.map"
+    ],
+    "asarUnpack": [
+      "node_modules/@lydell/**"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "Tiroir-Setup-${version}.${ext}",
+      "shortcutName": "Tiroir"
+    },
+    "portable": {
+      "artifactName": "Tiroir-Portable-${version}.${ext}"
+    }
+  }
+}
