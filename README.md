@@ -50,7 +50,24 @@ npm run dist       # fabrique les .exe (sur Windows)
 
 Les `.exe` sont fabriqués automatiquement par GitHub Actions à chaque tag `v*` (par exemple `git tag v1.0.1 && git push --tags`).
 
-Électron, xterm.js et node-pty.
+Electron, xterm.js et node-pty.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [jonasmelheb](https://github.com/jonasmelheb)
+- Approvers: [jonasmelheb](https://github.com/jonasmelheb)
+
+Every release is built from this repository by GitHub Actions; only those builds are signed.
+
+## Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. Everything Younesh saves (folders, colors, discussions, settings) stays in a local file on the computer.
+
+## Licence
+
+[MIT](LICENSE)
 
 ---
 
