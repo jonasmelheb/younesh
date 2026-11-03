@@ -21,6 +21,10 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 - **Colored folders**: create folders, pick a color (palette or custom), collapse them, rename them with a double-click. A session can have its own color too.
 - **Drag and drop**: move sessions between folders and reorder sessions and folders.
 - **Claude Code sessions**: the ✳ Claude button starts `claude` in the chosen directory. Each session keeps its own conversation and resumes it after Younesh is closed.
+- **Claude is waiting**: when Claude stops working and waits for your answer, the session turns orange, Windows shows a notification and the taskbar icon flashes. The terminal bell and OSC 9/777/99 notifications work too, for any program.
+- **Git branch** of each session in the sidebar, read straight from `.git` (no git process).
+- **Find in terminal** with highlighted matches, and a **quick switcher** to jump to any session or action in a few keystrokes.
+- **Fast**: GPU rendering (WebGL), configurable scrollback.
 - **Sandbox sessions**: the ⧉ button opens a session in a sandbox. Right-click it to set the command (`{dossier}` is replaced by the working directory).
 - **Startup command**: e.g. `npm run dev`, restarted in one click.
 - **Status dots**: green = running, blue = new output, red = exited, grey = idle (starts on click).
@@ -30,13 +34,15 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 
 | Action | Keys |
 | --- | --- |
+| Quick switcher (sessions and actions) | Ctrl+Shift+P |
 | New session | Ctrl+Shift+T |
 | New Claude session | Ctrl+Shift+N |
 | New folder | Ctrl+Shift+D |
 | Next / previous session | Ctrl+Tab / Ctrl+Shift+Tab |
 | Close session | Ctrl+Shift+W |
 | Rename | F2 |
-| Search | Ctrl+Shift+F |
+| Find in terminal | Ctrl+Shift+F |
+| Jump to the session waiting for you | Ctrl+Shift+U |
 | Toggle sidebar | Ctrl+Shift+B |
 | Font size | Ctrl + / Ctrl − / Ctrl 0 |
 | Copy / paste | Ctrl+C (with a selection) or Ctrl+Shift+C / Ctrl+V |

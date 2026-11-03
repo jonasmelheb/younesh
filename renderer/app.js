@@ -230,6 +230,112 @@ function jumpToAttention() {
   if (best) activate(best.id);
 }
 
+// ---------- Sélecteur rapide ----------
+
+const lastUsed = new Map(); // id -> date de dernière ouverture
+let paletteItems = [];
+let paletteIndex = 0;
+
+function paletteActions() {
+  return [
+    { label: 'Nouvelle discussion', hint: 'Ctrl+Maj+T', run: () => openNewDialog() },
+    { label: 'Nouvelle discussion Claude', hint: 'Ctrl+Maj+N', run: () => openNewDialog({ kind: 'claude' }) },
+    { label: 'Nouvelle sandbox', run: () => (settings().sandboxCommand ? openNewDialog({ kind: 'sandbox' }) : openSandboxSetup(true)) },
+    { label: 'Nouveau dossier', hint: 'Ctrl+Maj+D', run: () => createFolder() },
+    { label: 'Chercher dans le terminal', hint: 'Ctrl+Maj+F', run: openFind },
+    { label: 'Discussion qui attend', hint: 'Ctrl+Maj+U', run: jumpToAttention },
+    { label: 'Renommer la discussion', hint: 'F2', run: () => state.activeId && startRename('session', state.activeId) },
+    { label: 'Fermer la discussion', hint: 'Ctrl+Maj+W', run: () => state.activeId && closeSession(state.activeId) },
+    { label: 'Afficher ou masquer la barre latérale', hint: 'Ctrl+Maj+B', run: toggleSidebar },
+    { label: 'Réglages', run: openSettings },
+  ];
+}
+
+// Score de correspondance floue : les lettres de la recherche dans l'ordre, bonus si consécutives ou en début de mot.
+function fuzzy(query, text) {
+  if (!query) return 1;
+  const plain = (str) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const q = plain(query);
+  const t = plain(text);
+  let score = 0;
+  let ti = 0;
+  let prev = -2;
+  for (const ch of q) {
+    const i = t.indexOf(ch, ti);
+    if (i < 0) return 0;
+    score += 1 + (i === prev + 1 ? 3 : 0) + (i === 0 || /[\s·/\\_-]/.test(t[i - 1]) ? 2 : 0);
+    prev = i;
+    ti = i + 1;
+  }
+  return score;
+}
+
+function openPalette() {
+  closeMenu();
+  $('#palette').hidden = false;
+  $('#palette-input').value = '';
+  renderPalette();
+  $('#palette-input').focus();
+}
+
+function closePalette(refocus = true) {
+  $('#palette').hidden = true;
+  if (refocus) runtime.get(state.activeId)?.term.focus();
+}
+
+function renderPalette() {
+  const q = $('#palette-input').value.trim();
+  const sessions = state.sessions.map((s) => {
+    const folder = folderById(s.folderId)?.name;
+    const branch = branches[cwdOf(s)];
+    const text = [s.name, folder, branch, shortPath(cwdOf(s))].filter(Boolean).join(' · ');
+    const rt = runtime.get(s.id);
+    return { session: s, label: s.name, sub: [folder, branch && '⎇ ' + branch, shortPath(cwdOf(s))].filter(Boolean).join('  ·  '), score: fuzzy(q, text) + (rt?.attention ? 50 : 0), recent: lastUsed.get(s.id) || 0, run: () => activate(s.id) };
+  });
+  const actions = paletteActions().map((a) => ({ ...a, action: true, score: fuzzy(q, a.label) }));
+  paletteItems = [
+    ...sessions.filter((x) => x.score > 0).sort((a, b) => b.score - a.score || b.recent - a.recent),
+    ...actions.filter((x) => x.score > 0 && (q || x.label.startsWith('Nouvelle'))).sort((a, b) => b.score - a.score),
+  ].slice(0, 30);
+  paletteIndex = Math.min(paletteIndex, Math.max(0, paletteItems.length - 1));
+  if (!q) paletteIndex = paletteItems[0]?.session?.id === state.activeId && paletteItems.length > 1 ? 1 : 0;
+  const list = $('#palette-list');
+  list.innerHTML = '';
+  paletteItems.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'palette-item' + (i === paletteIndex ? ' selected' : '');
+    const s = item.session;
+    const rt = s && runtime.get(s.id);
+    row.innerHTML = `<span class="kind">${s ? KIND_ICON[s.kind] || '›_' : '⌘'}</span><div class="info"><div class="name"></div>${item.sub ? '<div class="sub"></div>' : ''}</div>${item.hint ? `<kbd>${item.hint}</kbd>` : ''}${rt?.attention ? '<span class="dot attention"></span>' : ''}`;
+    row.querySelector('.name').textContent = item.label;
+    if (item.sub) row.querySelector('.sub').textContent = item.sub;
+    if (s && colorOf(s)) row.querySelector('.kind').style.color = colorOf(s);
+    row.addEventListener('mousemove', () => {
+      if (paletteIndex === i) return;
+      paletteIndex = i;
+      list.querySelectorAll('.palette-item').forEach((r, j) => r.classList.toggle('selected', j === i));
+    });
+    row.addEventListener('click', () => runPalette(i));
+    list.appendChild(row);
+  });
+  if (!paletteItems.length) list.innerHTML = '<div class="palette-empty">Aucun résultat</div>';
+}
+
+function runPalette(i) {
+  const item = paletteItems[i];
+  if (!item) return;
+  closePalette(!item.action);
+  item.run();
+}
+
+function movePalette(delta) {
+  if (!paletteItems.length) return;
+  paletteIndex = (paletteIndex + delta + paletteItems.length) % paletteItems.length;
+  const rows = $('#palette-list').querySelectorAll('.palette-item');
+  rows.forEach((r, j) => r.classList.toggle('selected', j === paletteIndex));
+  rows[paletteIndex]?.scrollIntoView({ block: 'nearest' });
+}
+
 // ---------- Recherche dans le terminal ----------
 
 const FIND_DECORATIONS = { matchBackground: '#3a4a7a', activeMatchBackground: '#ff9f43', matchOverviewRuler: '#7c9cff', activeMatchColorOverviewRuler: '#ff9f43' };
@@ -380,6 +486,7 @@ function activate(id) {
   rt.el.classList.add('visible');
   rt.unread = false;
   rt.attention = false;
+  lastUsed.set(id, Date.now());
   $('#empty').hidden = true;
   if (!rt.running && !rt.exited) startSession(s);
   requestAnimationFrame(() => {
@@ -1036,7 +1143,7 @@ function openSettings() {
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
-      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl +/− taille</small>
+      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
     </form>`, (modal) => {
     const form = modal.querySelector('form');
@@ -1088,7 +1195,7 @@ function isShortcut(e) {
   if (e.ctrlKey && e.key === 'Tab') return true;
   if (e.key === 'F2') return true;
   if (mod && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) return true;
-  if (mod && e.shiftKey && ['t', 'n', 'd', 'w', 'f', 'b', 'u'].includes(key)) return true;
+  if (mod && e.shiftKey && ['t', 'n', 'd', 'w', 'f', 'b', 'u', 'p'].includes(key)) return true;
   if (e.ctrlKey && (e.key === 'PageDown' || e.key === 'PageUp')) return true;
   return false;
 }
@@ -1117,6 +1224,7 @@ function handleShortcut(e) {
   if (key === 'f') return openFind();
   if (key === 'b') return toggleSidebar();
   if (key === 'u') return jumpToAttention();
+  if (key === 'p') return $('#palette').hidden ? openPalette() : closePalette();
 }
 
 function toggleSidebar() {
@@ -1135,6 +1243,19 @@ function bindUI() {
     openSandboxSetup(false);
   });
   $('#btn-settings').addEventListener('click', openSettings);
+  $('#palette-input').addEventListener('input', () => {
+    paletteIndex = 0;
+    renderPalette();
+  });
+  $('#palette-input').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') movePalette(1);
+    else if (e.key === 'ArrowUp') movePalette(-1);
+    else if (e.key === 'Enter') runPalette(paletteIndex);
+    else if (e.key === 'Escape') closePalette();
+    else return;
+    e.preventDefault();
+  });
+  $('#palette-input').addEventListener('blur', () => setTimeout(() => !$('#palette').contains(document.activeElement) && closePalette(false), 120));
   $('#find-input').addEventListener('input', () => find(1, true));
   $('#find-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') find(e.shiftKey ? -1 : 1);

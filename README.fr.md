@@ -21,6 +21,10 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 - **Dossiers de couleur** : crée des dossiers, choisis leur couleur (palette ou couleur libre), replie-les, renomme-les avec un double-clic. Une discussion peut aussi avoir sa propre couleur.
 - **Glisser-déposer** : range une discussion dans un dossier, change l'ordre des discussions ou des dossiers.
 - **Discussions Claude Code** : le bouton ✳ Claude lance `claude` dans le dossier choisi. Chaque discussion garde sa propre conversation, qui reprend là où tu t'étais arrêté, même après avoir fermé Younesh.
+- **Claude t'attend** : quand Claude a fini et attend ta réponse, la discussion passe en orange, Windows affiche une notification et l'icône clignote dans la barre des tâches. Ça marche aussi avec la sonnerie du terminal et les notifications OSC 9/777/99 de n'importe quel programme.
+- **Branche git** de chaque discussion dans la barre latérale, lue directement dans `.git` (sans lancer git).
+- **Recherche dans le terminal** avec surlignage, et **sélecteur rapide** pour aller à n'importe quelle discussion ou action en quelques lettres.
+- **Rapide** : rendu par la carte graphique (WebGL), historique réglable.
 - **Sandbox** : le bouton ⧉ ouvre une discussion dans ta sandbox. Clic droit pour régler la commande (`{dossier}` est remplacé par le dossier de travail).
 - **Commande au démarrage** : par exemple `npm run dev` pour un serveur qui se relance d'un clic.
 - **Pastilles** : vert = en cours, bleu = nouvelle activité, rouge = terminé, gris = en veille (démarre au clic).
@@ -30,13 +34,15 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 
 | Action | Touches |
 | --- | --- |
+| Sélecteur rapide (discussions et actions) | Ctrl+Maj+P |
 | Nouvelle discussion | Ctrl+Maj+T |
 | Nouvelle discussion Claude | Ctrl+Maj+N |
 | Nouveau dossier | Ctrl+Maj+D |
 | Discussion suivante / précédente | Ctrl+Tab / Ctrl+Maj+Tab |
 | Fermer la discussion | Ctrl+Maj+W |
 | Renommer | F2 |
-| Rechercher | Ctrl+Maj+F |
+| Chercher dans le terminal | Ctrl+Maj+F |
+| Aller à la discussion qui attend | Ctrl+Maj+U |
 | Masquer la barre latérale | Ctrl+Maj+B |
 | Taille du texte | Ctrl + / Ctrl − / Ctrl 0 |
 | Copier / coller | Ctrl+C (avec une sélection) ou Ctrl+Maj+C / Ctrl+V |
