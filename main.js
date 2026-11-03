@@ -84,6 +84,56 @@ function cleanEnv(parent) {
   return env;
 }
 
+// Environnement relu dans le registre avant chaque terminal, comme Windows Terminal pour chaque onglet :
+// un programme installé après l'ouverture de Younesh (claude, sbx…) est trouvé, et Younesh ouvert par
+// l'installateur .msi, qui lui passe l'environnement du service Windows Installer, retrouve le PATH de l'utilisateur.
+// PowerShell plutôt que reg.exe : il rend les accents des chemins sans dépendre de la page de code de la console.
+const ENV_SCRIPT = `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+$keys = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', 'HKCU:\\Volatile Environment', 'HKCU:\\Environment'
+$out = for ($i = 0; $i -lt 3; $i++) {
+  $key = Get-Item -LiteralPath $keys[$i] -ErrorAction SilentlyContinue
+  if ($key) { foreach ($n in $key.GetValueNames()) { [pscustomobject]@{ s = $i; n = $n; v = [string]$key.GetValue($n, '', 'DoNotExpandEnvironmentNames') } } }
+}
+ConvertTo-Json -Compress -InputObject @($out)`;
+let envCache;
+
+function registryEnv() {
+  if (!isWin) return Promise.resolve([]);
+  if (envCache && Date.now() - envCache.at < 10000) return envCache.promise;
+  const promise = new Promise((resolve) => {
+    const encoded = Buffer.from(ENV_SCRIPT, 'utf16le').toString('base64');
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { windowsHide: true, timeout: 8000 }, (err, stdout) => {
+      try {
+        resolve(err ? [] : JSON.parse(stdout.replace(/^\uFEFF/, '')));
+      } catch {
+        resolve([]);
+      }
+    });
+  });
+  envCache = { at: Date.now(), promise };
+  return promise;
+}
+
+// Même ordre que Windows : système, session, puis utilisateur ; le Path de l'utilisateur s'ajoute à celui du système.
+// Les noms de variables ne tiennent pas compte de la casse sous Windows.
+async function freshEnv() {
+  const env = { ...process.env };
+  const keyOf = (name) => Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase());
+  const set = (name, value) => {
+    const k = keyOf(name);
+    if (k) delete env[k];
+    env[name] = value;
+  };
+  const expand = (v) => v.replace(/%([^%]+)%/g, (m, n) => (keyOf(n) ? env[keyOf(n)] : m));
+  let systemPath = '';
+  for (const { s, n, v } of await registryEnv()) {
+    if (n.toLowerCase() !== 'path') set(n, expand(v));
+    else if (s === 0) set('Path', (systemPath = expand(v)));
+    else if (s === 2) set('Path', [systemPath, expand(v)].filter(Boolean).join(';'));
+  }
+  return cleanEnv(env);
+}
+
 function detectShells() {
   const shells = [];
   const exists = (p) => { try { return fs.existsSync(p); } catch { return false; } };
@@ -159,7 +209,8 @@ ipcMain.handle('dialog:folder', async (_e, defaultPath) => {
   return res.canceled ? null : res.filePaths[0];
 });
 
-ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
+ipcMain.handle('pty:spawn', async (e, { id, shellPath, args, cwd, cols, rows }) => {
+  const env = await freshEnv();
   ptys.get(id)?.kill();
   const dir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
   const term = pty.spawn(shellPath, args || [], {
@@ -167,7 +218,7 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
     cols: cols || 80,
     rows: rows || 24,
     cwd: dir,
-    env: { ...cleanEnv(process.env), TERM_PROGRAM: 'Younesh', COLORTERM: 'truecolor' },
+    env: { ...env, TERM_PROGRAM: 'Younesh', COLORTERM: 'truecolor' },
     useConpty: isWin ? true : undefined,
   });
   ptys.set(id, term);
@@ -181,9 +232,10 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
   return { pid: term.pid, cwd: dir };
 });
 // Sandboxes déjà créées avec sbx. « sbx ls --json » renvoie une liste ; les anciennes versions l'emballent dans { sandboxes }.
-ipcMain.handle('sbx:list', () => new Promise((resolve) => {
-  execFile('sbx', ['ls', '--json'], { windowsHide: true, timeout: 30000, env: cleanEnv(process.env) }, (err, stdout, stderr) => {
-    if (err) return resolve({ error: err.code === 'ENOENT' ? 'sbx est introuvable sur ce PC (ou Younesh a été ouvert avant son installation).' : (stderr || err.message).trim() });
+ipcMain.handle('sbx:list', async () => {
+  const env = await freshEnv();
+  return new Promise((resolve) => execFile('sbx', ['ls', '--json'], { windowsHide: true, timeout: 30000, env }, (err, stdout, stderr) => {
+    if (err) return resolve({ error: err.code === 'ENOENT' ? 'sbx est introuvable sur ce PC.' : (stderr || err.message).trim() });
     try {
       const data = JSON.parse(stdout);
       const text = (v) => (typeof v === 'string' ? v : '');
@@ -197,8 +249,8 @@ ipcMain.handle('sbx:list', () => new Promise((resolve) => {
     } catch {
       resolve({ error: 'Réponse de « sbx ls » illisible.' });
     }
-  });
-}));
+  }));
+});
 
 // Mises à jour depuis les versions GitHub. La version installée avec Younesh-Setup télécharge la nouvelle
 // en arrière-plan et l'installe à la fermeture. La portable et celle installée par le .msi (souvent par la DSI)

@@ -1,6 +1,6 @@
 {
   "name": "younesh",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Terminal pour Windows avec les discussions rangées dans des dossiers de couleur",
   "main": "main.js",
   "scripts": {
