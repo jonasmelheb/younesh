@@ -196,6 +196,7 @@ function ensureTerminal(s) {
     return true;
   });
   term.parser.registerOscHandler(99, (text) => (attention(s.id, text.split(';').pop()), true));
+  term.onTitleChange((title) => applyClaudeTitle(s.id, title));
   rt = { term, fit, search, serialize, el, running: false, unread: false, exited: false, busy: false, attention: false };
   runtime.set(s.id, rt);
   new ResizeObserver(() => el.classList.contains('visible') && safeFit(rt)).observe(el);
@@ -876,6 +877,27 @@ function updateTopbar() {
   $('#active-dot').style.visibility = s ? 'visible' : 'hidden';
   if (s) setDot($('#active-dot'), s.id);
   document.title = s ? `${s.name} — Younesh` : 'Younesh';
+}
+
+// Claude Code écrit le nom de la session dans le titre du terminal : « ✳ Nom », le symbole tourne
+// pendant qu'il travaille. On reprend ce nom (après /rename par exemple). Les titres des shells
+// (chemins, noms de programmes) commencent par une lettre et sont ignorés.
+function claudeTitle(title) {
+  const m = /^[^\p{L}\p{N}\s]\s+(.+)$/u.exec(title.trim());
+  const name = m?.[1].trim();
+  return name && name !== 'Claude Code' ? name : null;
+}
+
+function applyClaudeTitle(id, title) {
+  const s = sessionById(id);
+  const name = claudeTitle(title);
+  // titleSeen évite de réécraser un nom choisi dans Younesh quand Claude renvoie le même titre à la reprise.
+  if (!s || !name || name === s.titleSeen) return;
+  s.titleSeen = name;
+  s.name = name;
+  save();
+  updateTopbar();
+  if (!document.querySelector('.rename-input')) render();
 }
 
 function startRename(type, id) {
