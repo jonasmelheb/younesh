@@ -6,6 +6,7 @@ const pty = require('@lydell/node-pty');
 
 const isWin = process.platform === 'win32';
 const storePath = () => path.join(app.getPath('userData'), 'younesh.json');
+const buffersPath = () => path.join(app.getPath('userData'), 'buffers.json');
 const ptys = new Map();
 let win;
 
@@ -112,6 +113,20 @@ function gitBranch(dir) {
 }
 
 ipcMain.handle('store:load', () => loadStore());
+// Contenu des terminaux, gardé à part pour ne pas alourdir le fichier de réglages.
+ipcMain.handle('buffers:load', () => {
+  try {
+    return JSON.parse(fs.readFileSync(buffersPath(), 'utf8'));
+  } catch {
+    return {};
+  }
+});
+ipcMain.on('buffers:save', (e, data) => {
+  try {
+    fs.writeFileSync(buffersPath(), JSON.stringify(data));
+  } catch {}
+  e.returnValue = true;
+});
 ipcMain.handle('git:branches', (_e, dirs) => Object.fromEntries(dirs.map((d) => [d, gitBranch(d)])));
 ipcMain.handle('store:save', (_e, data) => {
   const store = loadStore();

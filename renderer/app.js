@@ -19,6 +19,8 @@ const runtime = new Map(); // id -> { term, fit, el, running, unread, exited, bu
 const CLAUDE_QUIET_MS = 3000;
 let saveTimer = null;
 let branches = {}; // dossier -> branche git
+let savedBuffers = {}; // id -> contenu du terminal à la fermeture précédente
+const RESTORE_LINES = 1000;
 let search = '';
 
 const isMac = () => info.platform === 'darwin';
@@ -40,6 +42,7 @@ function settings() {
     sidebarWidth: 280,
     gpu: true,
     notify: true,
+    restore: true,
     scrollback: 10000,
     ...state.settings,
   };
@@ -63,6 +66,9 @@ async function init() {
     settings: stored.settings || {},
   };
   document.documentElement.style.setProperty('--sidebar-w', settings().sidebarWidth + 'px');
+  if (settings().restore) savedBuffers = await api.loadBuffers();
+  window.addEventListener('beforeunload', () => api.saveBuffers(collectBuffers()));
+  setInterval(() => api.saveBuffers(collectBuffers()), 60000);
 
   api.onData((id, data) => {
     const rt = runtime.get(id);
@@ -126,6 +132,8 @@ function ensureTerminal(s) {
   term.loadAddon(fit);
   const search = new SearchAddon.SearchAddon();
   term.loadAddon(search);
+  const serialize = new SerializeAddon.SerializeAddon();
+  term.loadAddon(serialize);
   search.onDidChangeResults(({ resultIndex, resultCount }) => {
     if (s.id === state.activeId) $('#find-count').textContent = resultCount ? `${resultIndex + 1}/${resultCount}` : 'Aucun';
   });
@@ -135,6 +143,11 @@ function ensureTerminal(s) {
   $('#terminals').appendChild(el);
   term.open(el);
   if (st.gpu) enableGpu(term);
+  if (savedBuffers[s.id]) {
+    term.write(savedBuffers[s.id]);
+    term.write('\r\n\x1b[2m──── session précédente ────\x1b[0m\r\n');
+    delete savedBuffers[s.id];
+  }
   // Un fichier ou dossier glissé dans le terminal y colle son chemin.
   el.addEventListener('dragover', (e) => e.dataTransfer.types.includes('Files') && e.preventDefault());
   el.addEventListener('drop', (e) => {
@@ -174,7 +187,7 @@ function ensureTerminal(s) {
     return true;
   });
   term.parser.registerOscHandler(99, (text) => (attention(s.id, text.split(';').pop()), true));
-  rt = { term, fit, search, el, running: false, unread: false, exited: false, busy: false, attention: false };
+  rt = { term, fit, search, serialize, el, running: false, unread: false, exited: false, busy: false, attention: false };
   runtime.set(s.id, rt);
   new ResizeObserver(() => el.classList.contains('visible') && safeFit(rt)).observe(el);
   return rt;
@@ -383,6 +396,18 @@ function find(dir, incremental = false) {
   const opts = { caseSensitive: findCase, incremental, decorations: FIND_DECORATIONS };
   if (dir > 0) rt.search.findNext(q, opts);
   else rt.search.findPrevious(q, opts);
+}
+
+// Seuls les terminaux classiques sont gardés : Claude et la sandbox réaffichent déjà leur conversation.
+function collectBuffers() {
+  if (!settings().restore) return {};
+  const out = { ...savedBuffers };
+  for (const [id, rt] of runtime) {
+    const s = sessionById(id);
+    if (s?.kind === 'shell') out[id] = rt.serialize.serialize({ scrollback: RESTORE_LINES });
+  }
+  for (const id of Object.keys(out)) if (!sessionById(id)) delete out[id];
+  return out;
 }
 
 function safeFit(rt) {
@@ -1169,6 +1194,7 @@ function openSettings() {
       <label class="field"><span>Police</span><input name="fontFamily" value="${esc(st.fontFamily)}" spellcheck="false"></label>
       <label class="field"><span>Taille du texte</span><input name="fontSize" type="number" min="9" max="28" value="${st.fontSize}"></label>
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
+      <label class="check"><input type="checkbox" name="restore" ${st.restore ? 'checked' : ''}> Retrouver le contenu des terminaux au redémarrage</label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
       <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl +/− taille</small>
@@ -1186,7 +1212,7 @@ function openSettings() {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(form));
       const gpuChanged = !!data.gpu !== settings().gpu;
-      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify };
+      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify, restore: !!data.restore };
       applyFont();
       if (gpuChanged) alert('L\'accélération graphique changera au prochain démarrage de Younesh.');
       save();

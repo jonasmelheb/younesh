@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('younesh', {
   kill: (id) => ipcRenderer.send('pty:kill', id),
   onData: (fn) => ipcRenderer.on('pty:data', (_e, id, data) => fn(id, data)),
   onExit: (fn) => ipcRenderer.on('pty:exit', (_e, id, code) => fn(id, code)),
+  loadBuffers: () => ipcRenderer.invoke('buffers:load'),
+  saveBuffers: (data) => ipcRenderer.sendSync('buffers:save', data),
   gitBranches: (dirs) => ipcRenderer.invoke('git:branches', dirs),
   openJson: () => ipcRenderer.invoke('file:openJson'),
   saveJson: (name, text) => ipcRenderer.invoke('file:saveJson', name, text),
