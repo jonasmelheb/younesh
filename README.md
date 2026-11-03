@@ -18,11 +18,13 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 ## Features
 
 - **Sessions in a sidebar**: each terminal session has a name, a working directory and a shell. PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and WSL are detected automatically.
-- **Colored folders**: create folders, pick a color (palette or custom), collapse them, rename them with a double-click. A session can have its own color too.
+- **Colored folders**: create folders, pick a color (palette or custom), collapse them, rename them with a double-click. A session can have its own color too. A colored folder tints everything inside it with a pale shade of its color.
 - **Drag and drop**: move sessions between folders and reorder sessions and folders.
 - **Claude Code sessions**: the ✳ Claude button starts `claude` in the chosen directory. Each session keeps its own conversation and resumes it after Younesh is closed.
-- **Claude is waiting**: when Claude stops working and waits for your answer, the session turns orange, Windows shows a notification and the taskbar icon flashes. The terminal bell and OSC 9/777/99 notifications work too, for any program.
-- **Git branch** of each session in the sidebar, read straight from `.git` (no git process).
+- **Claude is waiting**: when Claude stops working and waits for your answer, the session turns orange and the taskbar icon flashes (a Windows notification can be turned on in Settings). The terminal bell and OSC 9/777/99 notifications work too, for any program.
+- **Git branch** under each session name in the sidebar, read straight from `.git` (no git process). The folder path is in the top bar.
+- **Quick terminal**: the ›_ button opens a terminal right away in your home folder (`C:\Users\you`) with the default shell.
+- **Session name from Claude**: `/rename` in Claude Code renames the session.
 - **Find in terminal** with highlighted matches, and a **quick switcher** to jump to any session or action in a few keystrokes.
 - **Fast**: GPU rendering (WebGL), configurable scrollback.
 - **sbx sandboxes**: the ⧉ button creates a sandbox for a project in a few clicks: pick the folder, tick what to install inside (plugins, system packages…), done. The setup is split in three layers so a new sbx version only touches the sbx commands:
@@ -48,6 +50,7 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 | Quick switcher (sessions and actions) | Ctrl+Shift+P |
 | New session | Ctrl+Shift+T |
 | New Claude session | Ctrl+Shift+N |
+| Terminal in your home folder | Ctrl+Shift+Q |
 | New folder | Ctrl+Shift+D |
 | Next / previous session | Ctrl+Tab / Ctrl+Shift+Tab |
 | Close session | Ctrl+Shift+W |
@@ -58,7 +61,7 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 | Toggle sidebar | Ctrl+Shift+B |
 | Font size | Ctrl + / Ctrl − / Ctrl 0 |
 | Copy / paste | Ctrl+C (with a selection) or Ctrl+Shift+C / Ctrl+V |
-| New line in Claude | Shift+Enter |
+| New line in Claude (also when started by hand in a shell) | Shift+Enter |
 
 Right-click a session or a folder for all options. Middle-click a session to close it.
 

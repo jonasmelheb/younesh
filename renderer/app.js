@@ -35,7 +35,7 @@ function settings() {
     defaultCwd: info.home,
     sidebarWidth: 280,
     gpu: true,
-    notify: true,
+    notify: false,
     restore: true,
     theme: 'sombre',
     cursorStyle: 'block',
@@ -196,7 +196,11 @@ function ensureTerminal(s) {
     return true;
   });
   term.parser.registerOscHandler(99, (text) => (attention(s.id, text.split(';').pop()), true));
-  term.onTitleChange((title) => applyClaudeTitle(s.id, title));
+  term.onTitleChange((title) => {
+    // Claude Code tourne dans ce terminal tant que son titre commence par son symbole (« ✳ … ») ; il le vide en quittant.
+    rt.inClaude = CLAUDE_TITLE.test(title.trim());
+    applyClaudeTitle(s.id, title);
+  });
   rt = { term, fit, search, serialize, el, running: false, unread: false, exited: false, busy: false, attention: false };
   runtime.set(s.id, rt);
   new ResizeObserver(() => el.classList.contains('visible') && safeFit(rt)).observe(el);
@@ -273,6 +277,7 @@ function paletteActions() {
   return [
     { label: 'Nouvelle discussion', hint: 'Ctrl+Maj+T', run: () => openNewDialog() },
     { label: 'Nouvelle discussion Claude', hint: 'Ctrl+Maj+N', run: () => openNewDialog({ kind: 'claude' }) },
+    { label: 'Terminal dans le dossier personnel', hint: 'Ctrl+Maj+Q', run: homeTerminal },
     { label: 'Nouvelle sandbox', run: () => openSbxNew() },
     { label: 'Préparer le poste pour sbx', run: openSbxSetup },
     { label: 'Configurer sbx', run: openSbxConfig },
@@ -524,8 +529,9 @@ function terminalKey(e, id) {
     term.paste(api.paste());
     return false;
   }
-  // Maj+Entrée = retour à la ligne dans Claude Code.
-  if (e.key === 'Enter' && e.shiftKey && sessionById(id)?.kind === 'claude') {
+  // Maj+Entrée = retour à la ligne dans Claude Code, aussi quand on l'a lancé à la main dans un shell.
+  // Ailleurs, Échap+Entrée effacerait la ligne de PowerShell : on laisse passer la touche.
+  if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.altKey && (sessionById(id)?.kind === 'claude' || runtime.get(id)?.inClaude)) {
     api.write(id, '\x1b\r');
     return false;
   }
@@ -774,7 +780,7 @@ function render() {
     const items = state.sessions.filter((s) => s.folderId === f.id && matches(s));
     if (search && !items.length && !f.name.toLowerCase().includes(search.toLowerCase())) continue;
     const el = document.createElement('div');
-    el.className = 'folder' + (f.collapsed && !search ? ' collapsed' : '');
+    el.className = 'folder' + (f.collapsed && !search ? ' collapsed' : '') + (f.color ? ' tinted' : '');
     el.dataset.folder = f.id;
     if (f.color) el.style.setProperty('--folder-color', f.color);
     const head = document.createElement('div');
@@ -842,8 +848,9 @@ function sessionEl(s) {
   el.innerHTML = `<span class="kind">${KIND_ICON[s.kind] || '›_'}</span><div class="info"><div class="name"></div><div class="sub"></div></div><span class="dot"></span>`;
   el.querySelector('.name').textContent = s.name;
   const branch = branches[cwdOf(s)];
+  // Dans la liste : le nom et la branche en dessous. Le chemin reste dans la barre du haut et l'infobulle.
   if (branch) el.querySelector('.sub').append(Object.assign(document.createElement('span'), { className: 'branch', textContent: '⎇ ' + branch }));
-  el.querySelector('.sub').append(shortPath(cwdOf(s)));
+  else el.querySelector('.sub').remove();
   if (s.color) el.querySelector('.kind').style.color = s.color;
   el.title = `${s.name}\n${cwdOf(s) || ''}${branch ? `\nBranche : ${branch}` : ''}`;
   el.addEventListener('click', () => activate(s.id));
@@ -882,8 +889,10 @@ function updateTopbar() {
 // Claude Code écrit le nom de la session dans le titre du terminal : « ✳ Nom », le symbole tourne
 // pendant qu'il travaille. On reprend ce nom (après /rename par exemple). Les titres des shells
 // (chemins, noms de programmes) commencent par une lettre et sont ignorés.
+const CLAUDE_TITLE = /^[^\p{L}\p{N}\s]\s+(.+)$/u;
+
 function claudeTitle(title) {
-  const m = /^[^\p{L}\p{N}\s]\s+(.+)$/u.exec(title.trim());
+  const m = CLAUDE_TITLE.exec(title.trim());
   const name = m?.[1].trim();
   return name && name !== 'Claude Code' ? name : null;
 }
@@ -1294,7 +1303,7 @@ function openSettings() {
       <label class="check"><input type="checkbox" name="restore" ${st.restore ? 'checked' : ''}> Retrouver le contenu des terminaux au redémarrage</label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
-      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl+Maj+E côte à côte · Ctrl +/− taille</small>
+      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+Q terminal dans le dossier personnel · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl+Maj+E côte à côte · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
     </form>`, (modal) => {
     const form = modal.querySelector('form');
@@ -1412,13 +1421,18 @@ function quickNew(kind) {
   createSession({ kind, folderId: active?.folderId ?? null, cwd: active && cwdOf(active) });
 }
 
+// Le bouton ›_ : un terminal tout de suite, avec le shell par défaut, dans le dossier personnel.
+function homeTerminal() {
+  createSession({ kind: 'shell', cwd: info.home, folderId: null });
+}
+
 function isShortcut(e) {
   const mod = isMac() ? e.metaKey : e.ctrlKey;
   const key = e.key.toLowerCase();
   if (e.ctrlKey && e.key === 'Tab') return true;
   if (e.key === 'F2') return true;
   if (mod && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) return true;
-  if (mod && e.shiftKey && ['t', 'n', 'd', 'w', 'f', 'b', 'u', 'p', 'e'].includes(key)) return true;
+  if (mod && e.shiftKey && ['t', 'n', 'q', 'd', 'w', 'f', 'b', 'u', 'p', 'e'].includes(key)) return true;
   if (e.ctrlKey && (e.key === 'PageDown' || e.key === 'PageUp')) return true;
   return false;
 }
@@ -1443,6 +1457,7 @@ function handleShortcut(e) {
   if (e.key === '0') return changeFontSize(0);
   if (key === 't') return quickNew('shell');
   if (key === 'n') return quickNew('claude');
+  if (key === 'q') return homeTerminal();
   if (key === 'd') return createFolder();
   if (key === 'w') return state.activeId && closeSession(state.activeId);
   if (key === 'f') return openFind();
@@ -1462,6 +1477,7 @@ function bindUI() {
   $('#btn-new').addEventListener('click', () => openNewDialog());
   $('#btn-new-claude').addEventListener('click', () => openNewDialog({ kind: 'claude' }));
   $('#btn-new-folder').addEventListener('click', () => createFolder());
+  $('#btn-home').addEventListener('click', homeTerminal);
   $('#btn-sandbox').addEventListener('click', () => openSbxNew());
   $('#btn-sandbox').addEventListener('contextmenu', sbxButtonMenu);
   $('#btn-settings').addEventListener('click', openSettings);

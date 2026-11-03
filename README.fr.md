@@ -18,11 +18,13 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 ## Ce que ça fait
 
 - **Discussions à gauche** : chaque terminal est une discussion avec un nom, un dossier de travail et un shell (PowerShell 7, Windows PowerShell, Invite de commandes, Git Bash ou WSL, détectés automatiquement).
-- **Dossiers de couleur** : crée des dossiers, choisis leur couleur (palette ou couleur libre), replie-les, renomme-les avec un double-clic. Une discussion peut aussi avoir sa propre couleur.
+- **Dossiers de couleur** : crée des dossiers, choisis leur couleur (palette ou couleur libre), replie-les, renomme-les avec un double-clic. Une discussion peut aussi avoir sa propre couleur. Un dossier coloré teinte en pâle tout ce qu'il contient.
 - **Glisser-déposer** : range une discussion dans un dossier, change l'ordre des discussions ou des dossiers.
 - **Discussions Claude Code** : le bouton ✳ Claude lance `claude` dans le dossier choisi. Chaque discussion garde sa propre conversation, qui reprend là où tu t'étais arrêté, même après avoir fermé Younesh.
-- **Claude t'attend** : quand Claude a fini et attend ta réponse, la discussion passe en orange, Windows affiche une notification et l'icône clignote dans la barre des tâches. Ça marche aussi avec la sonnerie du terminal et les notifications OSC 9/777/99 de n'importe quel programme.
-- **Branche git** de chaque discussion dans la barre latérale, lue directement dans `.git` (sans lancer git).
+- **Claude t'attend** : quand Claude a fini et attend ta réponse, la discussion passe en orange et l'icône clignote dans la barre des tâches (la notification Windows s'active dans les Réglages). Ça marche aussi avec la sonnerie du terminal et les notifications OSC 9/777/99 de n'importe quel programme.
+- **Branche git** sous le nom de chaque discussion, lue directement dans `.git` (sans lancer git). Le chemin du dossier est dans la barre du haut.
+- **Terminal rapide** : le bouton ›_ ouvre tout de suite un terminal dans ton dossier personnel (`C:\Users\toi`) avec le shell par défaut.
+- **Nom donné par Claude** : `/rename` dans Claude Code renomme la discussion.
 - **Recherche dans le terminal** avec surlignage, et **sélecteur rapide** pour aller à n'importe quelle discussion ou action en quelques lettres.
 - **Rapide** : rendu par la carte graphique (WebGL), historique réglable.
 - **Sandbox sbx** : le bouton ⧉ crée une sandbox pour un projet en quelques clics : tu choisis le dossier, tu coches ce qu'il faut installer dedans (plugins, paquets système…), c'est prêt. La configuration est en trois couches, pour qu'une nouvelle version de sbx ne touche que les commandes sbx :
@@ -48,6 +50,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 | Sélecteur rapide (discussions et actions) | Ctrl+Maj+P |
 | Nouvelle discussion | Ctrl+Maj+T |
 | Nouvelle discussion Claude | Ctrl+Maj+N |
+| Terminal dans le dossier personnel | Ctrl+Maj+Q |
 | Nouveau dossier | Ctrl+Maj+D |
 | Discussion suivante / précédente | Ctrl+Tab / Ctrl+Maj+Tab |
 | Fermer la discussion | Ctrl+Maj+W |
@@ -58,7 +61,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 | Masquer la barre latérale | Ctrl+Maj+B |
 | Taille du texte | Ctrl + / Ctrl − / Ctrl 0 |
 | Copier / coller | Ctrl+C (avec une sélection) ou Ctrl+Maj+C / Ctrl+V |
-| Retour à la ligne dans Claude | Maj+Entrée |
+| Retour à la ligne dans Claude (même lancé à la main dans un shell) | Maj+Entrée |
 
 Clic droit sur une discussion ou un dossier pour toutes les options. Clic molette sur une discussion pour la fermer.
 

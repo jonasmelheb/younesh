@@ -49,6 +49,7 @@ body.mac .sidebar-top { padding-left: 84px; }
 .sidebar-actions button { flex: 1; white-space: nowrap; }
 .search-row { display: flex; gap: 6px; margin: 0 10px 8px; }
 .search-row button.icon { flex: 0 0 32px; padding: 0; }
+.prompt-glyph { font-size: 12px; font-weight: 600; letter-spacing: -.5px; }
 
 button {
   background: var(--panel-2);
@@ -113,6 +114,13 @@ button.danger { color: var(--danger); }
 .folder-head:hover .add { visibility: visible; }
 .folder-head .add + .add { margin-left: -4px; }
 .folder-body { padding-left: 10px; margin-left: 11px; border-left: 2px solid var(--folder-color, var(--border)); }
+/* Un dossier coloré teinte en pâle tout ce qu'il contient. */
+.folder.tinted { background: color-mix(in srgb, var(--folder-color) 9%, transparent); padding-bottom: 2px; }
+.folder.tinted .folder-head:hover,
+.folder.tinted .session:hover { background: color-mix(in srgb, var(--folder-color) 15%, transparent); }
+.folder.tinted .session.active { background: color-mix(in srgb, var(--folder-color) 24%, transparent); }
+.folder.tinted .session.attention { background: rgba(255,159,67,.14); }
+.folder.tinted .session.shell .kind { color: color-mix(in srgb, var(--folder-color) 80%, var(--text)); }
 .unfiled-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; padding: 12px 8px 4px; }
 
 .session {
