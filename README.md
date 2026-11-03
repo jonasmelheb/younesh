@@ -32,6 +32,12 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 
   The configuration is stored locally and can be imported or exported as JSON (right-click ⧉ → Configure sbx). Placeholders: `{projet}`, `{dossier}`, `{script}`, and `{secret:NAME}`, asked when the command runs and never saved.
 - **Startup command**: e.g. `npm run dev`, restarted in one click.
+- **Launch a whole folder**: ▶ on a folder starts all its sessions (server, Claude, tests…) at once; « Stop all » stops them.
+- **Side by side**: open two sessions next to each other, with a draggable divider.
+- **Drop a file** in the terminal to paste its path, quoted for your shell.
+- **Restore content**: the last 1000 lines of each terminal come back after a restart.
+- **Themes**: Dark, Midnight, Graphite, Light or automatic, cursor style, translucent sidebar (Windows 11 Mica, experimental).
+- **Backup**: export and import your folders, sessions and settings to move from one PC to another.
 - **Status dots**: green = running, blue = new output, red = exited, grey = idle (starts on click).
 - Everything is saved locally: folders, colors, order and window size.
 
@@ -48,6 +54,7 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 | Rename | F2 |
 | Find in terminal | Ctrl+Shift+F |
 | Jump to the session waiting for you | Ctrl+Shift+U |
+| Side by side on / off | Ctrl+Shift+E |
 | Toggle sidebar | Ctrl+Shift+B |
 | Font size | Ctrl + / Ctrl − / Ctrl 0 |
 | Copy / paste | Ctrl+C (with a selection) or Ctrl+Shift+C / Ctrl+V |

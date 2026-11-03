@@ -32,6 +32,12 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 
   La configuration reste sur le PC et s'importe ou s'exporte en JSON (clic droit sur ⧉, Configurer sbx). Variables : `{projet}`, `{dossier}`, `{script}`, et `{secret:NOM}`, demandé au lancement et jamais enregistré.
 - **Commande au démarrage** : par exemple `npm run dev` pour un serveur qui se relance d'un clic.
+- **Tout lancer** : ▶ sur un dossier démarre toutes ses discussions (serveur, Claude, tests…) d'un coup ; « Tout arrêter » les coupe.
+- **Côte à côte** : deux discussions l'une à côté de l'autre, avec un séparateur déplaçable.
+- **Glisser un fichier** dans le terminal pour coller son chemin, avec les guillemets qu'il faut.
+- **Contenu retrouvé** : les 1000 dernières lignes de chaque terminal reviennent après un redémarrage.
+- **Thèmes** : Sombre, Minuit, Graphite, Clair ou automatique, style du curseur, barre latérale translucide (effet Mica de Windows 11, expérimental).
+- **Sauvegarde** : exporte et importe tes dossiers, discussions et réglages pour passer d'un PC à l'autre.
 - **Pastilles** : vert = en cours, bleu = nouvelle activité, rouge = terminé, gris = en veille (démarre au clic).
 - Tout est sauvegardé : dossiers, couleurs, ordre et taille de la fenêtre.
 
@@ -48,6 +54,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 | Renommer | F2 |
 | Chercher dans le terminal | Ctrl+Maj+F |
 | Aller à la discussion qui attend | Ctrl+Maj+U |
+| Côte à côte / un seul panneau | Ctrl+Maj+E |
 | Masquer la barre latérale | Ctrl+Maj+B |
 | Taille du texte | Ctrl + / Ctrl − / Ctrl 0 |
 | Copier / coller | Ctrl+C (avec une sélection) ou Ctrl+Maj+C / Ctrl+V |
