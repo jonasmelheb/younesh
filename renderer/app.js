@@ -33,6 +33,8 @@ function settings() {
     defaultShell: shells[0]?.id,
     defaultCwd: info.home,
     sidebarWidth: 280,
+    gpu: true,
+    scrollback: 10000,
     ...state.settings,
   };
 }
@@ -93,7 +95,7 @@ function ensureTerminal(s) {
     lineHeight: 1.15,
     cursorBlink: true,
     allowProposedApi: true,
-    scrollback: 10000,
+    scrollback: st.scrollback,
     theme: THEME,
     macOptionIsMeta: true,
   });
@@ -104,6 +106,7 @@ function ensureTerminal(s) {
   el.className = 'term';
   $('#terminals').appendChild(el);
   term.open(el);
+  if (st.gpu) enableGpu(term);
   term.attachCustomKeyEventHandler((e) => terminalKey(e, s.id));
   term.onData((data) => api.write(s.id, data));
   term.onResize(({ cols, rows }) => api.resize(s.id, cols, rows));
@@ -111,6 +114,15 @@ function ensureTerminal(s) {
   runtime.set(s.id, rt);
   new ResizeObserver(() => el.classList.contains('visible') && safeFit(rt)).observe(el);
   return rt;
+}
+
+// Rendu par la carte graphique ; si le contexte WebGL est perdu, xterm repasse au rendu normal.
+function enableGpu(term) {
+  try {
+    const gpu = new WebglAddon.WebglAddon();
+    gpu.onContextLoss(() => gpu.dispose());
+    term.loadAddon(gpu);
+  } catch {}
 }
 
 function safeFit(rt) {
@@ -870,6 +882,8 @@ function openSettings() {
       <label class="field"><span>Commande de la sandbox</span><input name="sandboxCommand" value="${esc(st.sandboxCommand || '')}" placeholder="ex. sbx run claude {dossier}" spellcheck="false"></label>
       <label class="field"><span>Police</span><input name="fontFamily" value="${esc(st.fontFamily)}" spellcheck="false"></label>
       <label class="field"><span>Taille du texte</span><input name="fontSize" type="number" min="9" max="28" value="${st.fontSize}"></label>
+      <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
+      <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
       <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F rechercher · Ctrl+Maj+B barre latérale · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
     </form>`, (modal) => {
@@ -882,8 +896,10 @@ function openSettings() {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(form));
-      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14 };
+      const gpuChanged = !!data.gpu !== settings().gpu;
+      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu };
       applyFont();
+      if (gpuChanged) alert('L\'accélération graphique changera au prochain démarrage de Younesh.');
       save();
       closeModal();
     });
@@ -895,6 +911,7 @@ function applyFont() {
   for (const rt of runtime.values()) {
     rt.term.options.fontSize = st.fontSize;
     rt.term.options.fontFamily = st.fontFamily;
+    rt.term.options.scrollback = st.scrollback;
     safeFit(rt);
   }
 }
