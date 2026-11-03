@@ -145,6 +145,15 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
   });
   return { pid: term.pid, cwd: dir };
 });
+ipcMain.handle('file:openJson', async () => {
+  const res = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+  return res.canceled ? null : fs.readFileSync(res.filePaths[0], 'utf8');
+});
+ipcMain.handle('file:saveJson', async (_e, name, text) => {
+  const res = await dialog.showSaveDialog(win, { defaultPath: name, filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (!res.canceled) fs.writeFileSync(res.filePath, text);
+  return !res.canceled;
+});
 ipcMain.on('win:flash', () => win && !win.isFocused() && win.flashFrame(true));
 ipcMain.on('win:focus', () => {
   if (!win) return;

@@ -25,7 +25,12 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 - **Git branch** of each session in the sidebar, read straight from `.git` (no git process).
 - **Find in terminal** with highlighted matches, and a **quick switcher** to jump to any session or action in a few keystrokes.
 - **Fast**: GPU rendering (WebGL), configurable scrollback.
-- **Sandbox sessions**: the ⧉ button opens a session in a sandbox. Right-click it to set the command (`{dossier}` is replaced by the working directory).
+- **sbx sandboxes**: the ⧉ button creates a sandbox for a project in a few clicks: pick the folder, tick what to install inside (plugins, system packages…), done. The setup is split in three layers so a new sbx version only touches the sbx commands:
+  - `cli`: the sbx commands themselves (create, open, exec, remove);
+  - `setup`: one-time machine preparation (login, network policies, secrets), with a checklist;
+  - `installs`: what can be installed inside a sandbox, chosen per project and sent as a single `exec`.
+
+  The configuration is stored locally and can be imported or exported as JSON (right-click ⧉ → Configure sbx). Placeholders: `{projet}`, `{dossier}`, `{script}`, and `{secret:NAME}`, asked when the command runs and never saved.
 - **Startup command**: e.g. `npm run dev`, restarted in one click.
 - **Status dots**: green = running, blue = new output, red = exited, grey = idle (starts on click).
 - Everything is saved locally: folders, colors, order and window size.

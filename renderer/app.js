@@ -240,7 +240,9 @@ function paletteActions() {
   return [
     { label: 'Nouvelle discussion', hint: 'Ctrl+Maj+T', run: () => openNewDialog() },
     { label: 'Nouvelle discussion Claude', hint: 'Ctrl+Maj+N', run: () => openNewDialog({ kind: 'claude' }) },
-    { label: 'Nouvelle sandbox', run: () => (settings().sandboxCommand ? openNewDialog({ kind: 'sandbox' }) : openSandboxSetup(true)) },
+    { label: 'Nouvelle sandbox', run: () => openSbxNew() },
+    { label: 'Préparer le poste pour sbx', run: openSbxSetup },
+    { label: 'Configurer sbx', run: openSbxConfig },
     { label: 'Nouveau dossier', hint: 'Ctrl+Maj+D', run: () => createFolder() },
     { label: 'Chercher dans le terminal', hint: 'Ctrl+Maj+F', run: openFind },
     { label: 'Discussion qui attend', hint: 'Ctrl+Maj+U', run: jumpToAttention },
@@ -390,6 +392,7 @@ function startupCommand(s, shell) {
     const fresh = `claude --session-id ${s.claudeId}${extra}`;
     return shell.family === 'powershell' ? `${resume}; if (-not $?) { ${fresh} }` : `${resume} || ${fresh}`;
   }
+  if (s.kind === 'sandbox' && s.sbx) return sbxStartup(s);
   if (s.kind === 'sandbox') {
     const tpl = settings().sandboxCommand?.trim();
     return tpl ? tpl.replaceAll('{dossier}', `"${s.cwd}"`) : null;
@@ -409,9 +412,6 @@ async function startSession(s) {
   const rt = ensureTerminal(s);
   rt.el.querySelector('.exit-bar')?.remove();
   const shell = shells.find((x) => x.id === s.shell) || shells[0];
-  if (s.kind === 'sandbox' && !settings().sandboxCommand?.trim()) {
-    rt.term.writeln('\x1b[33mLa sandbox n\'est pas encore configurée : clic droit sur le bouton Sandbox, ou Réglages.\x1b[0m');
-  }
   if (!shell) {
     rt.term.writeln('\x1b[31mAucun shell trouvé sur ce PC.\x1b[0m');
     return;
@@ -426,6 +426,17 @@ async function startSession(s) {
     if (s.kind === 'claude' && !s.claudeStarted) {
       s.claudeStarted = true;
       save();
+    }
+    if (s.sbx && !s.sbx.created) {
+      s.sbx.created = true;
+      save();
+    }
+    // Commande tapée pour l'utilisateur (sans Entrée quand il doit d'abord attendre quelque chose).
+    if (s.prefill) {
+      const { text, enter } = s.prefill;
+      delete s.prefill;
+      save();
+      setTimeout(() => api.write(s.id, text + (enter ? '\r' : '')), 1500);
     }
   } catch (err) {
     rt.running = false;
@@ -517,6 +528,7 @@ function createSession(opts) {
     claudeArgs: opts.claudeArgs || '',
     color: null,
   };
+  if (opts.sbx) s.sbx = { ...opts.sbx };
   if (s.kind === 'claude') {
     s.claudeId = uid();
     s.claudeStarted = false;
@@ -938,7 +950,7 @@ function folderMenu(e, f) {
   openMenu(e, (m) => {
     menuItem(m, '+ Nouvelle discussion ici', () => openNewDialog({ folderId: f.id }));
     menuItem(m, '✳ Nouvelle discussion Claude ici', () => openNewDialog({ folderId: f.id, kind: 'claude' }));
-    menuItem(m, '⧉ Nouvelle sandbox ici', () => openNewDialog({ folderId: f.id, kind: 'sandbox' }));
+    menuItem(m, '⧉ Nouvelle sandbox ici', () => openSbxNew({ folderId: f.id }));
     menuSep(m);
     menuItem(m, 'Renommer', () => startRename('folder', f.id));
     menuItem(m, f.collapsed ? 'Déplier' : 'Replier', () => {
@@ -959,6 +971,7 @@ function folderMenu(e, f) {
 function sessionMenu(e, s) {
   const rt = runtime.get(s.id);
   openMenu(e, (m) => {
+    if (s.sbx) sbxSessionMenu(m, s);
     menuItem(m, 'Renommer', () => startRename('session', s.id));
     menuItem(m, 'Dupliquer', () => duplicateSession(s.id));
     menuItem(m, rt?.running ? 'Redémarrer' : 'Démarrer', () => {
@@ -1005,6 +1018,7 @@ function button(label, cls, fn) {
 
 function openModal(html, onReady) {
   const modal = $('#modal');
+  modal.classList.remove('wide');
   modal.innerHTML = html;
   $('#modal-backdrop').hidden = false;
   onReady(modal);
@@ -1029,7 +1043,7 @@ function sessionForm(s, title, submitLabel) {
         <div class="segmented" id="kind">
           <button type="button" data-kind="shell">›_ Terminal</button>
           <button type="button" data-kind="claude">✳ Claude Code</button>
-          <button type="button" data-kind="sandbox">⧉ Sandbox</button>
+          ${s.kind === 'sandbox' ? '<button type="button" data-kind="sandbox">⧉ Sandbox</button>' : ''}
         </div>
       </label>
       <label class="field"><span>Nom</span><input name="name" value="${esc(s.name)}" placeholder="Automatique" spellcheck="false"></label>
@@ -1042,7 +1056,7 @@ function sessionForm(s, title, submitLabel) {
       <label class="field" data-for="claude"><span>Options Claude (facultatif)</span><input name="claudeArgs" value="${esc(s.claudeArgs)}" placeholder="ex. --model opus" spellcheck="false">
         <small>La conversation Claude est liée à cette discussion : elle reprend là où tu t'étais arrêté, même après avoir fermé Younesh.</small></label>
       <div class="field" data-for="sandbox"><span>Sandbox</span>
-        <small>${settings().sandboxCommand ? `Lance : <code>${esc(settings().sandboxCommand)}</code>` : 'Pas encore configurée : clic droit sur le bouton Sandbox pour la régler.'}</small></div>
+        <small>${s.sbx ? `Sandbox sbx « ${esc(s.sbx.projet)} ». Clic droit sur la discussion pour la rouvrir, y installer des outils ou la supprimer.` : 'Ancienne discussion sandbox : utilise le bouton ⧉ pour en créer une nouvelle.'}</small></div>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">${submitLabel}</button></div>
     </form>`;
 }
@@ -1107,26 +1121,6 @@ function openEditDialog(s) {
   });
 }
 
-function openSandboxSetup(thenCreate) {
-  const st = settings();
-  openModal(`
-    <h2>Configurer la sandbox</h2>
-    <p class="hint">Commande lancée à l'ouverture d'une discussion Sandbox. <code>{dossier}</code> est remplacé par le dossier de travail de la discussion.</p>
-    <form>
-      <label class="field"><span>Commande de la sandbox</span><input name="sandboxCommand" value="${esc(st.sandboxCommand || '')}" placeholder="ex. sbx run claude {dossier}" spellcheck="false"></label>
-      <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">${thenCreate ? 'Enregistrer et ouvrir' : 'Enregistrer'}</button></div>
-    </form>`, (modal) => {
-    modal.querySelector('#cancel').addEventListener('click', closeModal);
-    modal.querySelector('form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      state.settings.sandboxCommand = e.target.sandboxCommand.value.trim();
-      save();
-      closeModal();
-      if (thenCreate) openNewDialog({ kind: 'sandbox' });
-    });
-  });
-}
-
 function openSettings() {
   const st = settings();
   const shellOptions = shells.map((x) => `<option value="${x.id}" ${x.id === st.defaultShell ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
@@ -1137,7 +1131,7 @@ function openSettings() {
       <div class="field"><span>Dossier de travail par défaut</span>
         <div class="row"><input name="defaultCwd" value="${esc(st.defaultCwd)}" spellcheck="false"><button type="button" id="browse">Parcourir…</button></div>
       </div>
-      <label class="field"><span>Commande de la sandbox</span><input name="sandboxCommand" value="${esc(st.sandboxCommand || '')}" placeholder="ex. sbx run claude {dossier}" spellcheck="false"></label>
+      <div class="field"><span>Sandbox sbx</span><div class="row"><button type="button" id="sbx-setup">Préparer le poste…</button><button type="button" id="sbx-config">Configurer sbx…</button></div></div>
       <label class="field"><span>Police</span><input name="fontFamily" value="${esc(st.fontFamily)}" spellcheck="false"></label>
       <label class="field"><span>Taille du texte</span><input name="fontSize" type="number" min="9" max="28" value="${st.fontSize}"></label>
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
@@ -1152,6 +1146,8 @@ function openSettings() {
       if (dir) form.defaultCwd.value = dir;
     });
     modal.querySelector('#cancel').addEventListener('click', closeModal);
+    modal.querySelector('#sbx-setup').addEventListener('click', openSbxSetup);
+    modal.querySelector('#sbx-config').addEventListener('click', openSbxConfig);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(form));
@@ -1201,6 +1197,7 @@ function isShortcut(e) {
 }
 
 function handleShortcut(e) {
+  if (document.querySelector('.secret-layer')) return;
   if (!$('#modal-backdrop').hidden) {
     if (e.key === 'Escape') closeModal();
     return;
@@ -1237,11 +1234,8 @@ function bindUI() {
   $('#btn-new').addEventListener('click', () => openNewDialog());
   $('#btn-new-claude').addEventListener('click', () => openNewDialog({ kind: 'claude' }));
   $('#btn-new-folder').addEventListener('click', () => createFolder());
-  $('#btn-sandbox').addEventListener('click', () => (settings().sandboxCommand ? openNewDialog({ kind: 'sandbox' }) : openSandboxSetup(true)));
-  $('#btn-sandbox').addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    openSandboxSetup(false);
-  });
+  $('#btn-sandbox').addEventListener('click', () => openSbxNew());
+  $('#btn-sandbox').addEventListener('contextmenu', sbxButtonMenu);
   $('#btn-settings').addEventListener('click', openSettings);
   $('#palette-input').addEventListener('input', () => {
     paletteIndex = 0;

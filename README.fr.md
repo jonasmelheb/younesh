@@ -25,7 +25,12 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 - **Branche git** de chaque discussion dans la barre latérale, lue directement dans `.git` (sans lancer git).
 - **Recherche dans le terminal** avec surlignage, et **sélecteur rapide** pour aller à n'importe quelle discussion ou action en quelques lettres.
 - **Rapide** : rendu par la carte graphique (WebGL), historique réglable.
-- **Sandbox** : le bouton ⧉ ouvre une discussion dans ta sandbox. Clic droit pour régler la commande (`{dossier}` est remplacé par le dossier de travail).
+- **Sandbox sbx** : le bouton ⧉ crée une sandbox pour un projet en quelques clics : tu choisis le dossier, tu coches ce qu'il faut installer dedans (plugins, paquets système…), c'est prêt. La configuration est en trois couches, pour qu'une nouvelle version de sbx ne touche que les commandes sbx :
+  - `cli` : les commandes sbx elles-mêmes (créer, ouvrir, exécuter, supprimer) ;
+  - `setup` : la préparation du poste, une fois par PC (connexion, règles réseau, secrets), sous forme de liste à cocher ;
+  - `installs` : ce qu'on peut installer dans une sandbox, choisi projet par projet et envoyé en un seul `exec`.
+
+  La configuration reste sur le PC et s'importe ou s'exporte en JSON (clic droit sur ⧉, Configurer sbx). Variables : `{projet}`, `{dossier}`, `{script}`, et `{secret:NOM}`, demandé au lancement et jamais enregistré.
 - **Commande au démarrage** : par exemple `npm run dev` pour un serveur qui se relance d'un clic.
 - **Pastilles** : vert = en cours, bleu = nouvelle activité, rouge = terminé, gris = en veille (démarre au clic).
 - Tout est sauvegardé : dossiers, couleurs, ordre et taille de la fenêtre.
