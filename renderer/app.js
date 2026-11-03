@@ -14,7 +14,9 @@ const THEME = {
 let info = { platform: 'win32', home: '' };
 let shells = [];
 let state = { folders: [], sessions: [], activeId: null, settings: {} };
-const runtime = new Map(); // id -> { term, fit, el, running, unread, exited }
+const runtime = new Map(); // id -> { term, fit, el, running, unread, exited, busy, attention }
+// Claude anime son indicateur tant qu'il travaille : un silence de cette durée veut dire qu'il attend.
+const CLAUDE_QUIET_MS = 3000;
 let saveTimer = null;
 let search = '';
 
@@ -34,6 +36,7 @@ function settings() {
     defaultCwd: info.home,
     sidebarWidth: 280,
     gpu: true,
+    notify: true,
     scrollback: 10000,
     ...state.settings,
   };
@@ -62,6 +65,10 @@ async function init() {
     const rt = runtime.get(id);
     if (!rt) return;
     rt.term.write(data);
+    const now = Date.now();
+    rt.lastOutput = now;
+    // L'écho des touches et le redessin après un redimensionnement ne comptent pas comme du travail.
+    if (sessionById(id)?.kind === 'claude' && now - (rt.lastInput || 0) > 400 && now - (rt.lastResize || 0) > 800) rt.busy = true;
     if (id !== state.activeId && !rt.unread) {
       rt.unread = true;
       updateDot(id);
@@ -75,6 +82,17 @@ async function init() {
     showExitBar(id, code);
     updateDot(id);
   });
+
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, rt] of runtime) {
+      if (rt.busy && now - rt.lastOutput > CLAUDE_QUIET_MS) {
+        rt.busy = false;
+        attention(id, 'Claude attend ta réponse');
+      }
+    }
+  }, 1000);
+  window.addEventListener('focus', () => clearAttention(state.activeId));
 
   bindUI();
   render();
@@ -108,9 +126,25 @@ function ensureTerminal(s) {
   term.open(el);
   if (st.gpu) enableGpu(term);
   term.attachCustomKeyEventHandler((e) => terminalKey(e, s.id));
-  term.onData((data) => api.write(s.id, data));
-  term.onResize(({ cols, rows }) => api.resize(s.id, cols, rows));
-  rt = { term, fit, el, running: false, unread: false, exited: false };
+  term.onData((data) => {
+    rt.lastInput = Date.now();
+    clearAttention(s.id);
+    api.write(s.id, data);
+  });
+  term.onResize(({ cols, rows }) => {
+    rt.lastResize = Date.now();
+    api.resize(s.id, cols, rows);
+  });
+  // Sonnerie et notifications envoyées par les programmes (OSC 9 iTerm2, OSC 777 Ghostty, OSC 99 kitty).
+  term.onBell(() => attention(s.id, 'Le terminal te signale quelque chose'));
+  term.parser.registerOscHandler(9, (text) => (/^\d+;/.test(text) ? false : (attention(s.id, text), true)));
+  term.parser.registerOscHandler(777, (text) => {
+    const [kind, title, body] = text.split(';');
+    if (kind === 'notify') attention(s.id, body || title);
+    return true;
+  });
+  term.parser.registerOscHandler(99, (text) => (attention(s.id, text.split(';').pop()), true));
+  rt = { term, fit, el, running: false, unread: false, exited: false, busy: false, attention: false };
   runtime.set(s.id, rt);
   new ResizeObserver(() => el.classList.contains('visible') && safeFit(rt)).observe(el);
   return rt;
@@ -123,6 +157,39 @@ function enableGpu(term) {
     gpu.onContextLoss(() => gpu.dispose());
     term.loadAddon(gpu);
   } catch {}
+}
+
+function attention(id, message) {
+  const rt = runtime.get(id);
+  const s = sessionById(id);
+  if (!rt || !s || (id === state.activeId && document.hasFocus())) return;
+  rt.attentionAt = Date.now();
+  if (rt.attention) return;
+  rt.attention = true;
+  updateDot(id);
+  render();
+  api.flash();
+  if (settings().notify) {
+    const n = new Notification(s.name, { body: message || 'Nouvelle activité' });
+    n.onclick = () => {
+      api.focusWindow();
+      activate(id);
+    };
+  }
+}
+
+function clearAttention(id) {
+  const rt = runtime.get(id);
+  if (!rt?.attention) return;
+  rt.attention = false;
+  updateDot(id);
+  render();
+}
+
+function jumpToAttention() {
+  let best = null;
+  for (const [id, rt] of runtime) if (rt.attention && (!best || rt.attentionAt > best.at)) best = { id, at: rt.attentionAt };
+  if (best) activate(best.id);
 }
 
 function safeFit(rt) {
@@ -236,6 +303,7 @@ function activate(id) {
   const rt = ensureTerminal(s);
   rt.el.classList.add('visible');
   rt.unread = false;
+  rt.attention = false;
   $('#empty').hidden = true;
   if (!rt.running && !rt.exited) startSession(s);
   requestAnimationFrame(() => {
@@ -401,7 +469,8 @@ function render() {
     const head = document.createElement('div');
     head.className = 'folder-head';
     head.draggable = true;
-    head.innerHTML = `${CHEV_SVG}${FOLDER_SVG(f.color)}<span class="name"></span><span class="count">${items.length}</span>`;
+    const waiting = items.some((s) => runtime.get(s.id)?.attention);
+    head.innerHTML = `${CHEV_SVG}${FOLDER_SVG(f.color)}<span class="name"></span>${waiting ? '<span class="dot attention" title="Une discussion attend ta réponse"></span>' : ''}<span class="count">${items.length}</span>`;
     head.querySelector('.name').textContent = f.name;
     const add = button('+', 'add', (e) => {
       e.stopPropagation();
@@ -470,8 +539,9 @@ function sessionEl(s) {
 
 function setDot(dot, id) {
   const rt = runtime.get(id);
-  dot.className = 'dot' + (rt?.unread ? ' unread' : rt?.running ? ' running' : rt?.exited ? ' exited' : '');
-  dot.title = rt?.unread ? 'Nouvelle activité' : rt?.running ? 'En cours' : rt?.exited ? 'Terminé' : 'En veille — démarre au clic';
+  dot.className = 'dot' + (rt?.attention ? ' attention' : rt?.unread ? ' unread' : rt?.running ? ' running' : rt?.exited ? ' exited' : '');
+  dot.title = rt?.attention ? 'Attend ta réponse' : rt?.unread ? 'Nouvelle activité' : rt?.running ? 'En cours' : rt?.exited ? 'Terminé' : 'En veille — démarre au clic';
+  dot.closest('.session')?.classList.toggle('attention', !!rt?.attention);
 }
 
 function updateDot(id) {
@@ -883,8 +953,9 @@ function openSettings() {
       <label class="field"><span>Police</span><input name="fontFamily" value="${esc(st.fontFamily)}" spellcheck="false"></label>
       <label class="field"><span>Taille du texte</span><input name="fontSize" type="number" min="9" max="28" value="${st.fontSize}"></label>
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
+      <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
-      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F rechercher · Ctrl+Maj+B barre latérale · Ctrl +/− taille</small>
+      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F rechercher · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
     </form>`, (modal) => {
     const form = modal.querySelector('form');
@@ -897,7 +968,7 @@ function openSettings() {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(form));
       const gpuChanged = !!data.gpu !== settings().gpu;
-      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu };
+      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify };
       applyFont();
       if (gpuChanged) alert('L\'accélération graphique changera au prochain démarrage de Younesh.');
       save();
@@ -936,7 +1007,7 @@ function isShortcut(e) {
   if (e.ctrlKey && e.key === 'Tab') return true;
   if (e.key === 'F2') return true;
   if (mod && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) return true;
-  if (mod && e.shiftKey && ['t', 'n', 'd', 'w', 'f', 'b'].includes(key)) return true;
+  if (mod && e.shiftKey && ['t', 'n', 'd', 'w', 'f', 'b', 'u'].includes(key)) return true;
   if (e.ctrlKey && (e.key === 'PageDown' || e.key === 'PageUp')) return true;
   return false;
 }
@@ -964,6 +1035,7 @@ function handleShortcut(e) {
   if (key === 'w') return state.activeId && closeSession(state.activeId);
   if (key === 'f') return $('#search').focus();
   if (key === 'b') return toggleSidebar();
+  if (key === 'u') return jumpToAttention();
 }
 
 function toggleSidebar() {

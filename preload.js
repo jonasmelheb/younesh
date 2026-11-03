@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('younesh', {
   kill: (id) => ipcRenderer.send('pty:kill', id),
   onData: (fn) => ipcRenderer.on('pty:data', (_e, id, data) => fn(id, data)),
   onExit: (fn) => ipcRenderer.on('pty:exit', (_e, id, code) => fn(id, code)),
+  flash: () => ipcRenderer.send('win:flash'),
+  focusWindow: () => ipcRenderer.send('win:focus'),
   copy: (text) => clipboard.writeText(text),
   paste: () => clipboard.readText(),
 });

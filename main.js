@@ -40,6 +40,7 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  win.on('focus', () => win.flashFrame(false));
   win.on('close', () => {
     const store = loadStore();
     store.window = { ...win.getNormalBounds(), maximized: win.isMaximized() };
@@ -119,6 +120,13 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
   });
   return { pid: term.pid, cwd: dir };
 });
+ipcMain.on('win:flash', () => win && !win.isFocused() && win.flashFrame(true));
+ipcMain.on('win:focus', () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+});
 ipcMain.on('pty:write', (_e, id, data) => ptys.get(id)?.write(data));
 ipcMain.on('pty:resize', (_e, id, cols, rows) => {
   try { ptys.get(id)?.resize(cols, rows); } catch {}
@@ -129,6 +137,9 @@ ipcMain.on('pty:kill', (_e, id) => {
 });
 
 // Pas de menu par défaut : ses raccourcis (Ctrl+W, Ctrl+R…) voleraient les touches du terminal.
+// Nécessaire pour que les notifications Windows portent le nom de l'app.
+if (isWin) app.setAppUserModelId('com.jonasmelheb.younesh');
+
 app.whenReady().then(() => {
   Menu.setApplicationMenu(isWin ? null : Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]));
   createWindow();
