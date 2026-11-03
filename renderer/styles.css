@@ -297,3 +297,22 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-bottom
 .hint code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .check { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--text); font-size: 12.5px; }
 .check input { accent-color: var(--accent); width: 15px; height: 15px; }
+#findbar {
+  position: absolute;
+  top: 46px;
+  right: 18px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  background: var(--panel-2);
+  border: 1px solid #333846;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+#findbar input { width: 220px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; outline: none; }
+#findbar input:focus { border-color: var(--accent); }
+#findbar button.icon { width: 28px; height: 28px; padding: 0; background: transparent; border-color: transparent; color: var(--muted); }
+#findbar button.icon:hover, #findbar button.icon.on { background: #2b303d; color: var(--text); }
+#find-count { color: var(--muted); font-size: 11px; min-width: 44px; text-align: center; }

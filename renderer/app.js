@@ -124,6 +124,11 @@ function ensureTerminal(s) {
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
+  const search = new SearchAddon.SearchAddon();
+  term.loadAddon(search);
+  search.onDidChangeResults(({ resultIndex, resultCount }) => {
+    if (s.id === state.activeId) $('#find-count').textContent = resultCount ? `${resultIndex + 1}/${resultCount}` : 'Aucun';
+  });
   term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, url) => window.open(url)));
   const el = document.createElement('div');
   el.className = 'term';
@@ -159,7 +164,7 @@ function ensureTerminal(s) {
     return true;
   });
   term.parser.registerOscHandler(99, (text) => (attention(s.id, text.split(';').pop()), true));
-  rt = { term, fit, el, running: false, unread: false, exited: false, busy: false, attention: false };
+  rt = { term, fit, search, el, running: false, unread: false, exited: false, busy: false, attention: false };
   runtime.set(s.id, rt);
   new ResizeObserver(() => el.classList.contains('visible') && safeFit(rt)).observe(el);
   return rt;
@@ -223,6 +228,43 @@ function jumpToAttention() {
   let best = null;
   for (const [id, rt] of runtime) if (rt.attention && (!best || rt.attentionAt > best.at)) best = { id, at: rt.attentionAt };
   if (best) activate(best.id);
+}
+
+// ---------- Recherche dans le terminal ----------
+
+const FIND_DECORATIONS = { matchBackground: '#3a4a7a', activeMatchBackground: '#ff9f43', matchOverviewRuler: '#7c9cff', activeMatchColorOverviewRuler: '#ff9f43' };
+let findCase = false;
+
+function openFind() {
+  const rt = runtime.get(state.activeId);
+  if (!rt) return;
+  $('#findbar').hidden = false;
+  const selection = rt.term.getSelection();
+  if (selection && !selection.includes('\n')) $('#find-input').value = selection;
+  $('#find-input').focus();
+  $('#find-input').select();
+  find(1, true);
+}
+
+function closeFind() {
+  $('#findbar').hidden = true;
+  const rt = runtime.get(state.activeId);
+  rt?.search.clearDecorations();
+  rt?.term.focus();
+}
+
+function find(dir, incremental = false) {
+  const rt = runtime.get(state.activeId);
+  const q = $('#find-input').value;
+  if (!rt) return;
+  if (!q) {
+    rt.search.clearDecorations();
+    $('#find-count').textContent = '';
+    return;
+  }
+  const opts = { caseSensitive: findCase, incremental, decorations: FIND_DECORATIONS };
+  if (dir > 0) rt.search.findNext(q, opts);
+  else rt.search.findPrevious(q, opts);
 }
 
 function safeFit(rt) {
@@ -332,6 +374,7 @@ function activate(id) {
   const s = sessionById(id);
   if (!s) return;
   state.activeId = id;
+  if (!$('#findbar').hidden) closeFind();
   for (const [rid, rt] of runtime) rt.el.classList.toggle('visible', rid === id);
   const rt = ensureTerminal(s);
   rt.el.classList.add('visible');
@@ -993,7 +1036,7 @@ function openSettings() {
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
-      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F rechercher · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl +/− taille</small>
+      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
     </form>`, (modal) => {
     const form = modal.querySelector('form');
@@ -1071,7 +1114,7 @@ function handleShortcut(e) {
   if (key === 'n') return quickNew('claude');
   if (key === 'd') return createFolder();
   if (key === 'w') return state.activeId && closeSession(state.activeId);
-  if (key === 'f') return $('#search').focus();
+  if (key === 'f') return openFind();
   if (key === 'b') return toggleSidebar();
   if (key === 'u') return jumpToAttention();
 }
@@ -1092,6 +1135,19 @@ function bindUI() {
     openSandboxSetup(false);
   });
   $('#btn-settings').addEventListener('click', openSettings);
+  $('#find-input').addEventListener('input', () => find(1, true));
+  $('#find-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') find(e.shiftKey ? -1 : 1);
+    if (e.key === 'Escape') closeFind();
+  });
+  $('#find-next').addEventListener('click', () => find(1));
+  $('#find-prev').addEventListener('click', () => find(-1));
+  $('#find-close').addEventListener('click', closeFind);
+  $('#find-case').addEventListener('click', () => {
+    findCase = !findCase;
+    $('#find-case').classList.toggle('on', findCase);
+    find(1, true);
+  });
   $('#search').addEventListener('input', (e) => {
     search = e.target.value.trim();
     render();

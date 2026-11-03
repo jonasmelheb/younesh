@@ -39,6 +39,14 @@
       <span id="active-path"></span>
     </header>
     <div id="terminals"></div>
+    <div id="findbar" hidden>
+      <input id="find-input" placeholder="Rechercher dans le terminal" spellcheck="false">
+      <span id="find-count"></span>
+      <button id="find-case" class="icon" title="Respecter la casse">Aa</button>
+      <button id="find-prev" class="icon" title="Précédent (Maj+Entrée)">↑</button>
+      <button id="find-next" class="icon" title="Suivant (Entrée)">↓</button>
+      <button id="find-close" class="icon" title="Fermer (Échap)">✕</button>
+    </div>
     <div id="empty">
       <h1>Aucune discussion ouverte</h1>
       <p>Nouvelle discussion : <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>T</kbd> · Claude : <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>N</kbd> · Dossier : <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>D</kbd></p>
@@ -52,6 +60,7 @@
   <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
   <script src="../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
   <script src="../node_modules/@xterm/addon-webgl/lib/addon-webgl.js"></script>
+  <script src="../node_modules/@xterm/addon-search/lib/addon-search.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
