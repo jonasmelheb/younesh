@@ -27,7 +27,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Younesh-windows
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/*.msi
       - name: Signer avec SignPath
         if: env.SIGN == 'true'
         uses: signpath/github-action-submit-signing-request@v1
@@ -42,7 +44,9 @@ jobs:
       - name: Remplacer par les fichiers signés
         if: env.SIGN == 'true'
         shell: bash
-        run: cp -f signed/*.exe dist/ && node scripts/rehash-update.js
+        run: |
+          shopt -s nullglob
+          cp -f signed/*.exe signed/*.msi dist/ && node scripts/rehash-update.js
       - name: Publier la version
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
@@ -51,4 +55,4 @@ jobs:
         # latest.yml (et la carte des blocs) servent à la mise à jour automatique de la version installée.
         run: |
           shopt -s nullglob
-          gh release create "$GITHUB_REF_NAME" dist/*.exe dist/*.blockmap dist/latest.yml --title "Younesh $GITHUB_REF_NAME" --notes "Télécharge **Younesh-Setup** (installation, se met à jour toute seule) ou **Younesh-Portable** (sans installation)."
+          gh release create "$GITHUB_REF_NAME" dist/*.exe dist/*.msi dist/*.blockmap dist/latest.yml --title "Younesh $GITHUB_REF_NAME" --notes "Télécharge **Younesh-Setup** (installation, se met à jour toute seule), **Younesh-x.y.z.msi** (installation par la DSI ou msiexec) ou **Younesh-Portable** (sans installation)."

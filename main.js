@@ -200,8 +200,9 @@ ipcMain.handle('sbx:list', () => new Promise((resolve) => {
   });
 }));
 
-// Mises à jour depuis les versions GitHub. La version installée (Younesh-Setup) télécharge la nouvelle
-// en arrière-plan et l'installe à la fermeture. La version portable n'a pas d'installateur : on signale juste la sortie.
+// Mises à jour depuis les versions GitHub. La version installée avec Younesh-Setup télécharge la nouvelle
+// en arrière-plan et l'installe à la fermeture. La portable et celle installée par le .msi (souvent par la DSI)
+// ne peuvent pas relancer cet installateur : on signale juste la sortie.
 let updater;
 function nsisUpdater() {
   if (!updater) {
@@ -221,7 +222,9 @@ function newer(a, b) {
 
 ipcMain.handle('update:check', async () => {
   if (!isWin || !app.isPackaged) return null;
-  if (!process.env.PORTABLE_EXECUTABLE_DIR) {
+  // Seul l'installateur .exe laisse son désinstalleur à côté de Younesh.exe.
+  const fromSetup = !process.env.PORTABLE_EXECUTABLE_DIR && fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall Younesh.exe'));
+  if (fromSetup) {
     nsisUpdater().checkForUpdates().catch(() => {});
     return null;
   }

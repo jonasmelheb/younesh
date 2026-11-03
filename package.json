@@ -1,6 +1,6 @@
 {
   "name": "younesh",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Terminal pour Windows avec les discussions rangées dans des dossiers de couleur",
   "main": "main.js",
   "scripts": {
@@ -66,6 +66,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.png"
@@ -79,6 +85,12 @@
     },
     "portable": {
       "artifactName": "Younesh-Portable-${version}.${ext}"
+    },
+    "msi": {
+      "artifactName": "Younesh-${version}.${ext}",
+      "perMachine": false,
+      "shortcutName": "Younesh",
+      "createDesktopShortcut": true
     },
     "electronLanguages": [
       "fr",

@@ -1308,7 +1308,7 @@ function openSettings() {
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
       <label class="check"><input type="checkbox" name="restore" ${st.restore ? 'checked' : ''}> Retrouver le contenu des terminaux au redémarrage</label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
-      <label class="check"><input type="checkbox" name="autoUpdate" ${st.autoUpdate ? 'checked' : ''}> Mettre à jour Younesh automatiquement (version installée ; la portable signale les nouvelles versions)</label>
+      <label class="check"><input type="checkbox" name="autoUpdate" ${st.autoUpdate ? 'checked' : ''}> Mettre à jour Younesh automatiquement (installé avec Younesh-Setup ; la portable et le .msi signalent les nouvelles versions)</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
       <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+Q terminal dans le dossier personnel · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl+Maj+E côte à côte · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
