@@ -137,8 +137,10 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
   });
   ptys.set(id, term);
   term.onData((data) => !e.sender.isDestroyed() && e.sender.send('pty:data', id, data));
+  // Seule la fin du processus actuel compte : un redémarrage remplace l'ancien sans le signaler.
   term.onExit(({ exitCode }) => {
-    if (ptys.get(id) === term) ptys.delete(id);
+    if (ptys.get(id) !== term) return;
+    ptys.delete(id);
     if (!e.sender.isDestroyed()) e.sender.send('pty:exit', id, exitCode);
   });
   return { pid: term.pid, cwd: dir };
@@ -154,10 +156,7 @@ ipcMain.on('pty:write', (_e, id, data) => ptys.get(id)?.write(data));
 ipcMain.on('pty:resize', (_e, id, cols, rows) => {
   try { ptys.get(id)?.resize(cols, rows); } catch {}
 });
-ipcMain.on('pty:kill', (_e, id) => {
-  ptys.get(id)?.kill();
-  ptys.delete(id);
-});
+ipcMain.on('pty:kill', (_e, id) => ptys.get(id)?.kill());
 
 // Pas de menu par défaut : ses raccourcis (Ctrl+W, Ctrl+R…) voleraient les touches du terminal.
 // Nécessaire pour que les notifications Windows portent le nom de l'app.
