@@ -11,8 +11,8 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 ## Installer sur Windows
 
 1. Ouvre la page **Releases** du dépôt et télécharge :
-   - `Younesh-Setup-x.y.z.exe` pour l'installer (raccourci dans le menu Démarrer),
-   - ou `Younesh-Portable-x.y.z.exe` pour le lancer sans installation.
+   - `Younesh-Setup-x.y.z.exe` pour l'installer (raccourci dans le menu Démarrer). Ensuite, Younesh se met à jour tout seul : la nouvelle version se télécharge en arrière-plan et s'installe quand tu le fermes (case à décocher dans Réglages) ;
+   - ou `Younesh-Portable-x.y.z.exe` pour le lancer sans installation. Celui-là ne se met pas à jour, il te signale juste qu'une nouvelle version est sortie.
 2. L'app n'est pas signée, donc Windows affiche « Windows a protégé votre ordinateur ». Clique sur **Informations complémentaires**, puis **Exécuter quand même**.
 
 ## Ce que ça fait
@@ -32,6 +32,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
   - `setup` : la préparation du poste, une fois par PC (connexion, règles réseau, secrets), sous forme de liste à cocher ;
   - `installs` : ce qu'on peut installer dans une sandbox, choisi projet par projet et envoyé en un seul `exec`.
 
+  Le bouton ⧉ sert aussi à **ouvrir une sandbox existante** : Younesh liste celles du PC (`sbx ls`), même créées dans un autre terminal, et la rouvre dans une discussion.
   La configuration reste sur le PC et s'importe ou s'exporte en JSON (clic droit sur ⧉, Configurer sbx). Variables : `{projet}`, `{dossier}`, `{script}`, et `{secret:NOM}`, demandé au lancement et jamais enregistré.
 - **Commande au démarrage** : par exemple `npm run dev` pour un serveur qui se relance d'un clic.
 - **Tout lancer** : ▶ sur un dossier démarre toutes ses discussions (serveur, Claude, tests…) d'un coup ; « Tout arrêter » les coupe.

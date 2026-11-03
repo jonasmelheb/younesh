@@ -12,8 +12,8 @@ A free, open-source terminal for Windows that keeps every session in a sidebar, 
 
 Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) page:
 
-- `Younesh-Setup-x.y.z.exe` installs Younesh for the current user (no admin rights needed, Start menu shortcut).
-- `Younesh-Portable-x.y.z.exe` runs without installing.
+- `Younesh-Setup-x.y.z.exe` installs Younesh for the current user (no admin rights needed, Start menu shortcut). After that it updates itself: the new version downloads in the background and installs when you quit (can be turned off in Settings).
+- `Younesh-Portable-x.y.z.exe` runs without installing. It does not update itself, it only tells you when a new version is out.
 
 ## Features
 
@@ -32,6 +32,7 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
   - `setup`: one-time machine preparation (login, network policies, secrets), with a checklist;
   - `installs`: what can be installed inside a sandbox, chosen per project and sent as a single `exec`.
 
+  The ⧉ button also **opens an existing sandbox**: Younesh lists the ones on the PC (`sbx ls`), even those created in another terminal, and reopens it in a discussion.
   The configuration is stored locally and can be imported or exported as JSON (right-click ⧉ → Configure sbx). Placeholders: `{projet}`, `{dossier}`, `{script}`, and `{secret:NAME}`, asked when the command runs and never saved.
 - **Startup command**: e.g. `npm run dev`, restarted in one click.
 - **Launch a whole folder**: ▶ on a folder starts all its sessions (server, Claude, tests…) at once; « Stop all » stops them.

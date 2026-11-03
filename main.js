@@ -1,4 +1,5 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell: electronShell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, net, shell: electronShell } = require('electron');
+const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -179,6 +180,60 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
   });
   return { pid: term.pid, cwd: dir };
 });
+// Sandboxes déjà créées avec sbx. « sbx ls --json » renvoie une liste ; les anciennes versions l'emballent dans { sandboxes }.
+ipcMain.handle('sbx:list', () => new Promise((resolve) => {
+  execFile('sbx', ['ls', '--json'], { windowsHide: true, timeout: 30000, env: cleanEnv(process.env) }, (err, stdout, stderr) => {
+    if (err) return resolve({ error: err.code === 'ENOENT' ? 'sbx est introuvable sur ce PC (ou Younesh a été ouvert avant son installation).' : (stderr || err.message).trim() });
+    try {
+      const data = JSON.parse(stdout);
+      const text = (v) => (typeof v === 'string' ? v : '');
+      const sandboxes = (Array.isArray(data) ? data : data.sandboxes || []).filter((x) => x && x.name).map((x) => ({
+        name: x.name,
+        status: text(x.status),
+        agent: text(x.agent),
+        workspace: text((x.workspaces || [])[0] || x.workspace).replace(/:ro$/, ''),
+      }));
+      resolve({ sandboxes });
+    } catch {
+      resolve({ error: 'Réponse de « sbx ls » illisible.' });
+    }
+  });
+}));
+
+// Mises à jour depuis les versions GitHub. La version installée (Younesh-Setup) télécharge la nouvelle
+// en arrière-plan et l'installe à la fermeture. La version portable n'a pas d'installateur : on signale juste la sortie.
+let updater;
+function nsisUpdater() {
+  if (!updater) {
+    updater = require('electron-updater').autoUpdater;
+    updater.on('update-downloaded', ({ version }) => win && !win.isDestroyed() && win.webContents.send('update:ready', version));
+    updater.on('error', () => {});
+  }
+  return updater;
+}
+
+function newer(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+}
+
+ipcMain.handle('update:check', async () => {
+  if (!isWin || !app.isPackaged) return null;
+  if (!process.env.PORTABLE_EXECUTABLE_DIR) {
+    nsisUpdater().checkForUpdates().catch(() => {});
+    return null;
+  }
+  try {
+    const res = await net.fetch('https://api.github.com/repos/jonasmelheb/younesh/releases/latest');
+    const tag = String((await res.json()).tag_name || '').replace(/^v/, '');
+    return tag && newer(tag, app.getVersion()) ? tag : null;
+  } catch {
+    return null;
+  }
+});
+ipcMain.on('update:install', () => nsisUpdater().quitAndInstall(true, true));
 ipcMain.handle('file:openJson', async () => {
   const res = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
   return res.canceled ? null : fs.readFileSync(res.filePaths[0], 'utf8');

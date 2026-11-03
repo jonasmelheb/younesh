@@ -71,9 +71,19 @@ function sbxHelper(name, cwd, folderId, text, enter) {
   return h;
 }
 
-function toast(message, ms = 9000) {
+function toast(message, ms = 9000, action) {
   const el = $('#toast');
   el.textContent = message;
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'primary';
+    b.textContent = action.label;
+    b.addEventListener('click', () => {
+      el.hidden = true;
+      action.run();
+    });
+    el.append(b);
+  }
   el.hidden = false;
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => (el.hidden = true), ms);
@@ -143,6 +153,44 @@ function createSandbox(projet, dir, folderId, items) {
   } else {
     toast(`Sandbox « ${projet} » : connecte-toi dans Claude avec /login la première fois.`);
   }
+}
+
+// ---------- Sandbox existante ----------
+
+// Rouvre dans Younesh une sandbox créée ailleurs (autre terminal, tableau de bord sbx) ou dont la discussion a été fermée.
+function openSbxExisting(preset = {}) {
+  openModal(`
+    <h2>Ouvrir une sandbox existante</h2>
+    <div class="sbx-list"><small>Recherche des sandboxes (sbx ls)…</small></div>
+    <div class="modal-actions"><button type="button" id="new">Nouvelle sandbox…</button><span style="flex:1"></span><button type="button" id="cancel">Fermer</button></div>`, async (modal) => {
+    modal.querySelector('#cancel').addEventListener('click', closeModal);
+    modal.querySelector('#new').addEventListener('click', () => openSbxNew(preset));
+    const res = await api.sbxList();
+    const list = modal.querySelector('.sbx-list');
+    if (!list.isConnected) return;
+    if (res.error) return (list.innerHTML = `<small>${esc(res.error)}</small>`);
+    if (!res.sandboxes.length) return (list.innerHTML = '<small>Aucune sandbox sur ce PC.</small>');
+    list.innerHTML = res.sandboxes.map((x, i) => {
+      const known = state.sessions.some((s) => s.sbx?.projet === x.name);
+      const sub = [x.status, x.workspace && shortPath(x.workspace), known && 'déjà dans Younesh'].filter(Boolean).join(' · ');
+      return `<button type="button" class="sbx-item" data-i="${i}"><span class="kind">⧉</span><span class="info"><span class="name">${esc(x.name)}</span><span class="sub">${esc(sub)}</span></span></button>`;
+    }).join('');
+    list.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => {
+      closeModal();
+      openExistingSandbox(res.sandboxes[Number(b.dataset.i)], preset.folderId);
+    }));
+  });
+}
+
+function openExistingSandbox(x, folderId) {
+  const known = state.sessions.find((s) => s.sbx?.projet === x.name);
+  if (known) {
+    activate(known.id);
+    if (!runtime.get(known.id)?.running) startSession(known);
+    return;
+  }
+  const active = sessionById(state.activeId);
+  createSession({ kind: 'sandbox', name: x.name, cwd: x.workspace || info.home, folderId: folderId !== undefined ? folderId : active?.folderId ?? null, sbx: { projet: x.name, created: true } });
 }
 
 function openSbxInstall(s) {
@@ -312,6 +360,8 @@ function openSbxConfig() {
 function sbxButtonMenu(e) {
   openMenu(e, (m) => {
     menuItem(m, '⧉ Nouvelle sandbox…', () => openSbxNew());
+    menuItem(m, '⧉ Ouvrir une sandbox existante…', () => openSbxExisting());
+    menuSep(m);
     menuItem(m, 'Préparer le poste…', openSbxSetup);
     menuItem(m, 'Configurer sbx…', openSbxConfig);
   });

@@ -36,6 +36,7 @@ function settings() {
     sidebarWidth: 280,
     gpu: true,
     notify: false,
+    autoUpdate: true,
     restore: true,
     theme: 'sombre',
     cursorStyle: 'block',
@@ -107,6 +108,9 @@ async function init() {
   bindUI();
   render();
   refreshBranches();
+  api.onUpdateReady((version) => toast(`Younesh ${version} est téléchargé : il s'installera à la fermeture.`, 30000, { label: 'Redémarrer maintenant', run: api.installUpdate }));
+  checkUpdate();
+  setInterval(checkUpdate, 6 * 3600 * 1000);
   if (state.activeId && sessionById(state.activeId)) activate(state.activeId);
   else if (state.sessions[0]) activate(state.sessions[0].id);
   else showEmpty();
@@ -279,6 +283,7 @@ function paletteActions() {
     { label: 'Nouvelle discussion Claude', hint: 'Ctrl+Maj+N', run: () => openNewDialog({ kind: 'claude' }) },
     { label: 'Terminal dans le dossier personnel', hint: 'Ctrl+Maj+Q', run: homeTerminal },
     { label: 'Nouvelle sandbox', run: () => openSbxNew() },
+    { label: 'Ouvrir une sandbox existante', run: () => openSbxExisting() },
     { label: 'Préparer le poste pour sbx', run: openSbxSetup },
     { label: 'Configurer sbx', run: openSbxConfig },
     { label: 'Nouveau dossier', hint: 'Ctrl+Maj+D', run: () => createFolder() },
@@ -1102,6 +1107,7 @@ function folderMenu(e, f) {
     menuItem(m, '+ Nouvelle discussion ici', () => openNewDialog({ folderId: f.id }));
     menuItem(m, '✳ Nouvelle discussion Claude ici', () => openNewDialog({ folderId: f.id, kind: 'claude' }));
     menuItem(m, '⧉ Nouvelle sandbox ici', () => openSbxNew({ folderId: f.id }));
+    menuItem(m, '⧉ Ouvrir une sandbox existante ici', () => openSbxExisting({ folderId: f.id }));
     menuSep(m);
     menuItem(m, '▶ Tout lancer', () => launchFolder(f));
     menuItem(m, '■ Tout arrêter', () => stopFolder(f));
@@ -1302,6 +1308,7 @@ function openSettings() {
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
       <label class="check"><input type="checkbox" name="restore" ${st.restore ? 'checked' : ''}> Retrouver le contenu des terminaux au redémarrage</label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
+      <label class="check"><input type="checkbox" name="autoUpdate" ${st.autoUpdate ? 'checked' : ''}> Mettre à jour Younesh automatiquement (version installée ; la portable signale les nouvelles versions)</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
       <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+Q terminal dans le dossier personnel · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl+Maj+E côte à côte · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
@@ -1320,7 +1327,7 @@ function openSettings() {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(form));
       const gpuChanged = !!data.gpu !== settings().gpu;
-      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify, restore: !!data.restore, cursorBlink: !!data.cursorBlink, material: !!data.material };
+      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify, autoUpdate: !!data.autoUpdate, restore: !!data.restore, cursorBlink: !!data.cursorBlink, material: !!data.material };
       applyFont();
       applyAppearance();
       if (gpuChanged) alert('L\'accélération graphique changera au prochain démarrage de Younesh.');
@@ -1328,6 +1335,12 @@ function openSettings() {
       closeModal();
     });
   });
+}
+
+async function checkUpdate() {
+  if (!settings().autoUpdate) return;
+  const version = await api.checkUpdate();
+  if (version) toast(`Younesh ${version} est sorti.`, 30000, { label: 'Télécharger', run: () => window.open('https://github.com/jonasmelheb/younesh/releases/latest') });
 }
 
 function applyFont() {
@@ -1478,7 +1491,7 @@ function bindUI() {
   $('#btn-new-claude').addEventListener('click', () => openNewDialog({ kind: 'claude' }));
   $('#btn-new-folder').addEventListener('click', () => createFolder());
   $('#btn-home').addEventListener('click', homeTerminal);
-  $('#btn-sandbox').addEventListener('click', () => openSbxNew());
+  $('#btn-sandbox').addEventListener('click', sbxButtonMenu);
   $('#btn-sandbox').addEventListener('contextmenu', sbxButtonMenu);
   $('#btn-settings').addEventListener('click', openSettings);
   $('#palette-input').addEventListener('input', () => {
