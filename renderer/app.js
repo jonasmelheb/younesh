@@ -273,6 +273,8 @@ function paletteActions() {
     { label: 'Fermer la discussion', hint: 'Ctrl+Maj+W', run: () => state.activeId && closeSession(state.activeId) },
     { label: 'Afficher ou masquer la barre latérale', hint: 'Ctrl+Maj+B', run: toggleSidebar },
     { label: 'Réglages', run: openSettings },
+    { label: 'Exporter mes dossiers et réglages', run: exportBackup },
+    { label: 'Importer une sauvegarde', run: importBackup },
   ];
 }
 
@@ -1199,6 +1201,7 @@ function openSettings() {
       </div>
       <label class="check"><input type="checkbox" name="cursorBlink" ${st.cursorBlink ? 'checked' : ''}> Curseur clignotant</label>
       <label class="check"><input type="checkbox" name="material" ${st.material ? 'checked' : ''}> Barre latérale translucide (effet Mica de Windows 11, expérimental)</label>
+      <div class="field"><span>Sauvegarde de tes dossiers, discussions et réglages</span><div class="row"><button type="button" id="backup-export">Exporter…</button><button type="button" id="backup-import">Importer…</button></div></div>
       <label class="field"><span>Police</span><input name="fontFamily" value="${esc(st.fontFamily)}" spellcheck="false"></label>
       <label class="field"><span>Taille du texte</span><input name="fontSize" type="number" min="9" max="28" value="${st.fontSize}"></label>
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
@@ -1215,6 +1218,8 @@ function openSettings() {
     });
     modal.querySelector('#cancel').addEventListener('click', closeModal);
     modal.querySelector('#sbx-setup').addEventListener('click', openSbxSetup);
+    modal.querySelector('#backup-export').addEventListener('click', exportBackup);
+    modal.querySelector('#backup-import').addEventListener('click', importBackup);
     modal.querySelector('#sbx-config').addEventListener('click', openSbxConfig);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -1238,6 +1243,60 @@ function applyFont() {
     rt.term.options.scrollback = st.scrollback;
     safeFit(rt);
   }
+}
+
+// ---------- Sauvegarde ----------
+
+function backupJson() {
+  const sessions = state.sessions.map(({ prefill, ...s }) => s);
+  return JSON.stringify({ format: 'younesh-backup', version: 1, exportedAt: new Date().toISOString(), folders: state.folders, sessions, settings: state.settings }, null, 2);
+}
+
+function exportBackup() {
+  api.saveJson(`younesh-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, backupJson());
+}
+
+async function importBackup() {
+  const text = await api.openJson();
+  if (text != null) importBackupText(text);
+}
+
+function importBackupText(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return alert('Ce fichier n\'est pas un JSON valide.');
+  }
+  if (data.format !== 'younesh-backup') return alert('Ce fichier n\'est pas une sauvegarde Younesh.');
+  const newFolders = (data.folders || []).filter((f) => !folderById(f.id));
+  const newSessions = (data.sessions || []).filter((s) => !sessionById(s.id));
+  openModal(`
+    <h2>Importer une sauvegarde</h2>
+    <form>
+      <label class="check"><input type="checkbox" name="items" checked> Ajouter ${newFolders.length} dossier(s) et ${newSessions.length} discussion(s) à ceux que tu as déjà</label>
+      <label class="check"><input type="checkbox" name="settings"> Remplacer mes réglages (thème, police, configuration sbx…)</label>
+      <p class="hint">Rien n'est supprimé. Les dossiers de travail qui n'existent pas sur ce PC s'ouvriront dans ton dossier personnel.</p>
+      <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Importer</button></div>
+    </form>`, (modal) => {
+    const form = modal.querySelector('form');
+    modal.querySelector('#cancel').addEventListener('click', closeModal);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (form.items.checked) {
+        state.folders.push(...newFolders);
+        state.sessions.push(...newSessions);
+      }
+      if (form.settings.checked && data.settings) state.settings = { ...data.settings, sidebarWidth: state.settings.sidebarWidth };
+      closeModal();
+      applyAppearance();
+      applyFont();
+      render();
+      refreshBranches();
+      save();
+      toast('Sauvegarde importée.', 3000);
+    });
+  });
 }
 
 function applyAppearance() {
