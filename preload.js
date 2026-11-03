@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, clipboard } = require('electron');
+const { contextBridge, ipcRenderer, clipboard, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('younesh', {
   loadStore: () => ipcRenderer.invoke('store:load'),
@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('younesh', {
   saveJson: (name, text) => ipcRenderer.invoke('file:saveJson', name, text),
   flash: () => ipcRenderer.send('win:flash'),
   focusWindow: () => ipcRenderer.send('win:focus'),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   copy: (text) => clipboard.writeText(text),
   paste: () => clipboard.readText(),
 });

@@ -102,6 +102,7 @@ button.danger { color: var(--danger); }
   line-height: 1;
 }
 .folder-head:hover .add { visibility: visible; }
+.folder-head .add + .add { margin-left: -4px; }
 .folder-body { padding-left: 10px; margin-left: 11px; border-left: 2px solid var(--folder-color, var(--border)); }
 .unfiled-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; padding: 12px 8px 4px; }
 

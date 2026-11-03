@@ -135,6 +135,16 @@ function ensureTerminal(s) {
   $('#terminals').appendChild(el);
   term.open(el);
   if (st.gpu) enableGpu(term);
+  // Un fichier ou dossier glissé dans le terminal y colle son chemin.
+  el.addEventListener('dragover', (e) => e.dataTransfer.types.includes('Files') && e.preventDefault());
+  el.addEventListener('drop', (e) => {
+    if (!e.dataTransfer.files.length) return;
+    e.preventDefault();
+    const shell = shells.find((x) => x.id === s.shell) || shells[0];
+    const quote = (p) => (!/[\s'"()&;$`]/.test(p) ? p : shell?.family === 'posix' ? quotePosix(p) : `"${p}"`);
+    api.write(s.id, [...e.dataTransfer.files].map((f) => quote(api.pathForFile(f))).join(' ') + ' ');
+    term.focus();
+  });
   term.attachCustomKeyEventHandler((e) => terminalKey(e, s.id));
   term.onData((data) => {
     rt.lastInput = Date.now();
@@ -611,6 +621,21 @@ function cycle(dir) {
 
 // ---------- Dossiers ----------
 
+// Démarre toutes les discussions d'un dossier sans changer de discussion active.
+function launchFolder(f) {
+  const items = state.sessions.filter((s) => s.folderId === f.id && !runtime.get(s.id)?.running);
+  for (const s of items) {
+    ensureTerminal(s);
+    startSession(s);
+  }
+  toast(items.length ? `${items.length} discussion${items.length > 1 ? 's' : ''} lancée${items.length > 1 ? 's' : ''} dans « ${f.name} ».` : `Tout tourne déjà dans « ${f.name} ».`, 3000);
+}
+
+function stopFolder(f) {
+  const items = state.sessions.filter((s) => s.folderId === f.id && runtime.get(s.id)?.running);
+  if (items.length && confirm(`Arrêter les ${items.length} discussion(s) en cours dans « ${f.name} » ?`)) items.forEach((s) => api.kill(s.id));
+}
+
 function createFolder(rename = true) {
   const f = { id: uid(), name: 'Nouveau dossier', color: COLORS[(state.folders.length * 3) % COLORS.length], collapsed: false };
   state.folders.push(f);
@@ -668,6 +693,12 @@ function render() {
     const waiting = items.some((s) => runtime.get(s.id)?.attention);
     head.innerHTML = `${CHEV_SVG}${FOLDER_SVG(f.color)}<span class="name"></span>${waiting ? '<span class="dot attention" title="Une discussion attend ta réponse"></span>' : ''}<span class="count">${items.length}</span>`;
     head.querySelector('.name').textContent = f.name;
+    const launch = button('▶', 'add', (e) => {
+      e.stopPropagation();
+      launchFolder(f);
+    });
+    launch.title = 'Tout lancer';
+    head.appendChild(launch);
     const add = button('+', 'add', (e) => {
       e.stopPropagation();
       openNewDialog({ folderId: f.id });
@@ -951,6 +982,9 @@ function folderMenu(e, f) {
     menuItem(m, '+ Nouvelle discussion ici', () => openNewDialog({ folderId: f.id }));
     menuItem(m, '✳ Nouvelle discussion Claude ici', () => openNewDialog({ folderId: f.id, kind: 'claude' }));
     menuItem(m, '⧉ Nouvelle sandbox ici', () => openSbxNew({ folderId: f.id }));
+    menuSep(m);
+    menuItem(m, '▶ Tout lancer', () => launchFolder(f));
+    menuItem(m, '■ Tout arrêter', () => stopFolder(f));
     menuSep(m);
     menuItem(m, 'Renommer', () => startRename('folder', f.id));
     menuItem(m, f.collapsed ? 'Déplier' : 'Replier', () => {
@@ -1293,6 +1327,9 @@ function bindUI() {
     });
   });
   document.addEventListener('keydown', handleShortcut, true);
+  // Sans ça, lâcher un fichier hors du terminal ferait naviguer la fenêtre vers ce fichier.
+  document.addEventListener('dragover', (e) => e.dataTransfer.types.includes('Files') && e.preventDefault());
+  document.addEventListener('drop', (e) => e.dataTransfer.files.length && e.preventDefault());
   document.addEventListener('mousedown', (e) => {
     if (!e.target.closest('#menu')) closeMenu();
   });
