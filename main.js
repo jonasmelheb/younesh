@@ -64,6 +64,25 @@ function saveStore(data) {
   fs.renameSync(file + '.tmp', file);
 }
 
+// Variables qu'une session Claude Code pose pour ses propres commandes. Si Younesh a été lancé depuis Claude,
+// les terminaux en héritent et le Claude qu'on y lance se croit « enfant » : il n'enregistre plus la
+// conversation (plus de reprise) et peut couper les couleurs. Les réglages de l'utilisateur (CLAUDE_CODE_GIT_BASH_PATH…) restent.
+const CLAUDE_MARKERS = ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SSE_PORT', 'CLAUDE_CODE_SESSION_ATTENDED',
+  'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_BRIDGE_SESSION_ID'];
+
+function cleanEnv(parent) {
+  const env = { ...parent };
+  const fromClaude = 'CLAUDECODE' in env || 'CLAUDE_CODE_CHILD_SESSION' in env;
+  for (const k of CLAUDE_MARKERS) delete env[k];
+  // Posées par l'outil de commandes de Claude, pas par l'utilisateur : un vrai terminal a des couleurs.
+  if (fromClaude) {
+    delete env.NO_COLOR;
+    delete env.FORCE_COLOR;
+  }
+  return env;
+}
+
 function detectShells() {
   const shells = [];
   const exists = (p) => { try { return fs.existsSync(p); } catch { return false; } };
@@ -147,7 +166,7 @@ ipcMain.handle('pty:spawn', (e, { id, shellPath, args, cwd, cols, rows }) => {
     cols: cols || 80,
     rows: rows || 24,
     cwd: dir,
-    env: { ...process.env, TERM_PROGRAM: 'Younesh', COLORTERM: 'truecolor' },
+    env: { ...cleanEnv(process.env), TERM_PROGRAM: 'Younesh', COLORTERM: 'truecolor' },
     useConpty: isWin ? true : undefined,
   });
   ptys.set(id, term);
