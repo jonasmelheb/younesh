@@ -1,56 +1,60 @@
 <p align="center"><img src="build/icon.png" width="96" alt=""></p>
 
+<p align="center"><b>English</b> · <a href="README.fr.md">Français</a></p>
+
 # Younesh
 
-Un terminal pour Windows où chaque discussion est rangée à gauche, dans des dossiers de couleur.
+A free, open-source terminal for Windows that keeps every session in a sidebar, organized in colored folders. No account, no subscription, no telemetry.
 
-## Installer sur Windows
+![Younesh](docs/screenshot.png)
 
-1. Ouvre la page **Releases** du dépôt et télécharge :
-   - `Younesh-Setup-x.y.z.exe` pour l'installer (raccourci dans le menu Démarrer),
-   - ou `Younesh-Portable-x.y.z.exe` pour le lancer sans installation.
-2. L'app n'est pas signée, donc Windows affiche « Windows a protégé votre ordinateur ». Clique sur **Informations complémentaires**, puis **Exécuter quand même**.
+## Install
 
-## Ce que ça fait
+Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) page:
 
-- **Discussions à gauche** : chaque terminal est une discussion avec un nom, un dossier de travail et un shell (PowerShell 7, Windows PowerShell, Invite de commandes, Git Bash ou WSL, détectés automatiquement).
-- **Dossiers de couleur** : crée des dossiers, choisis leur couleur (palette ou couleur libre), replie-les, renomme-les avec un double-clic. Une discussion peut aussi avoir sa propre couleur.
-- **Glisser-déposer** : range une discussion dans un dossier, change l'ordre des discussions ou des dossiers.
-- **Discussions Claude Code** : le bouton ✳ Claude lance `claude` dans le dossier choisi. Chaque discussion garde sa propre conversation, qui reprend là où tu t'étais arrêté, même après avoir fermé Younesh.
-- **Sandbox** : le bouton ⧉ ouvre une discussion dans ta sandbox. Clic droit pour régler la commande (`{dossier}` est remplacé par le dossier de travail).
-- **Commande au démarrage** : par exemple `npm run dev` pour un serveur qui se relance d'un clic.
-- **Pastilles** : vert = en cours, bleu = nouvelle activité, rouge = terminé, gris = en veille (démarre au clic).
-- Tout est sauvegardé : dossiers, couleurs, ordre et taille de la fenêtre.
+- `Younesh-Setup-x.y.z.exe` installs Younesh for the current user (no admin rights needed, Start menu shortcut).
+- `Younesh-Portable-x.y.z.exe` runs without installing.
 
-## Raccourcis
+## Features
 
-| Action | Touches |
+- **Sessions in a sidebar**: each terminal session has a name, a working directory and a shell. PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and WSL are detected automatically.
+- **Colored folders**: create folders, pick a color (palette or custom), collapse them, rename them with a double-click. A session can have its own color too.
+- **Drag and drop**: move sessions between folders and reorder sessions and folders.
+- **Claude Code sessions**: the ✳ Claude button starts `claude` in the chosen directory. Each session keeps its own conversation and resumes it after Younesh is closed.
+- **Sandbox sessions**: the ⧉ button opens a session in a sandbox. Right-click it to set the command (`{dossier}` is replaced by the working directory).
+- **Startup command**: e.g. `npm run dev`, restarted in one click.
+- **Status dots**: green = running, blue = new output, red = exited, grey = idle (starts on click).
+- Everything is saved locally: folders, colors, order and window size.
+
+## Keyboard shortcuts
+
+| Action | Keys |
 | --- | --- |
-| Nouvelle discussion | Ctrl+Maj+T |
-| Nouvelle discussion Claude | Ctrl+Maj+N |
-| Nouveau dossier | Ctrl+Maj+D |
-| Discussion suivante / précédente | Ctrl+Tab / Ctrl+Maj+Tab |
-| Fermer la discussion | Ctrl+Maj+W |
-| Renommer | F2 |
-| Rechercher | Ctrl+Maj+F |
-| Masquer la barre latérale | Ctrl+Maj+B |
-| Taille du texte | Ctrl + / Ctrl − / Ctrl 0 |
-| Copier / coller | Ctrl+C (avec une sélection) ou Ctrl+Maj+C / Ctrl+V |
-| Retour à la ligne dans Claude | Maj+Entrée |
+| New session | Ctrl+Shift+T |
+| New Claude session | Ctrl+Shift+N |
+| New folder | Ctrl+Shift+D |
+| Next / previous session | Ctrl+Tab / Ctrl+Shift+Tab |
+| Close session | Ctrl+Shift+W |
+| Rename | F2 |
+| Search | Ctrl+Shift+F |
+| Toggle sidebar | Ctrl+Shift+B |
+| Font size | Ctrl + / Ctrl − / Ctrl 0 |
+| Copy / paste | Ctrl+C (with a selection) or Ctrl+Shift+C / Ctrl+V |
+| New line in Claude | Shift+Enter |
 
-Clic droit sur une discussion ou un dossier pour toutes les options. Clic molette sur une discussion pour la fermer.
+Right-click a session or a folder for all options. Middle-click a session to close it.
 
-## Développer
+## Development
 
 ```bash
 npm install
-npm start          # lance l'app
-npm run dist       # fabrique les .exe (sur Windows)
+npm start          # run the app
+npm run dist       # build the Windows .exe files (on Windows)
 ```
 
-Les `.exe` sont fabriqués automatiquement par GitHub Actions à chaque tag `v*` (par exemple `git tag v1.0.1 && git push --tags`).
+Releases are built from source by GitHub Actions for every `v*` tag ([workflow](.github/workflows/build.yml)).
 
-Electron, xterm.js et node-pty.
+Built with Electron, xterm.js and node-pty.
 
 ## Code signing policy
 
@@ -63,12 +67,12 @@ Every release is built from this repository by GitHub Actions; only those builds
 
 ## Privacy policy
 
-This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. Everything Younesh saves (folders, colors, discussions, settings) stays in a local file on the computer.
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. Everything Younesh saves (folders, colors, sessions, settings) stays in a local file on the computer (`%APPDATA%\younesh`).
 
-## Licence
+## License
 
 [MIT](LICENSE)
 
 ---
 
-<p align="right"><em>Fait par Y</em></p>
+<p align="right"><em>Made by Y</em></p>
