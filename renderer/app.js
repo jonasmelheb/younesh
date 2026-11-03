@@ -13,6 +13,7 @@ const CLAUDE_QUIET_MS = 3000;
 let saveTimer = null;
 let branches = {}; // dossier -> branche git
 let savedBuffers = {}; // id -> contenu du terminal à la fermeture précédente
+let split = null; // { left, right } quand deux discussions sont côte à côte
 const RESTORE_LINES = 1000;
 let search = '';
 
@@ -140,6 +141,14 @@ function ensureTerminal(s) {
   term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, url) => window.open(url)));
   const el = document.createElement('div');
   el.className = 'term';
+  el.innerHTML = '<div class="pane-head"><span class="pane-name"></span><button class="pane-close" title="Fermer le panneau (Ctrl+Maj+E)">✕</button></div>';
+  el.querySelector('.pane-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const keep = split && (split.left === s.id ? split.right : split.left);
+    split = null;
+    if (keep) activate(keep);
+  });
+  el.addEventListener('mousedown', () => split && state.activeId !== s.id && activate(s.id));
   $('#terminals').appendChild(el);
   term.open(el);
   if (st.gpu) enableGpu(term);
@@ -268,6 +277,7 @@ function paletteActions() {
     { label: 'Configurer sbx', run: openSbxConfig },
     { label: 'Nouveau dossier', hint: 'Ctrl+Maj+D', run: () => createFolder() },
     { label: 'Chercher dans le terminal', hint: 'Ctrl+Maj+F', run: openFind },
+    { label: 'Deux discussions côte à côte', hint: 'Ctrl+Maj+E', run: toggleSplit },
     { label: 'Discussion qui attend', hint: 'Ctrl+Maj+U', run: jumpToAttention },
     { label: 'Renommer la discussion', hint: 'F2', run: () => state.activeId && startRename('session', state.activeId) },
     { label: 'Fermer la discussion', hint: 'Ctrl+Maj+W', run: () => state.activeId && closeSession(state.activeId) },
@@ -527,11 +537,15 @@ function terminalKey(e, id) {
 function activate(id) {
   const s = sessionById(id);
   if (!s) return;
+  // Côte à côte, la discussion choisie prend la place de celle du panneau actif.
+  if (split && split.left !== id && split.right !== id) {
+    if (split.left === state.activeId) split.left = id;
+    else split.right = id;
+  }
   state.activeId = id;
   if (!$('#findbar').hidden) closeFind();
-  for (const [rid, rt] of runtime) rt.el.classList.toggle('visible', rid === id);
   const rt = ensureTerminal(s);
-  rt.el.classList.add('visible');
+  layout();
   rt.unread = false;
   rt.attention = false;
   lastUsed.set(id, Date.now());
@@ -544,6 +558,44 @@ function activate(id) {
   updateTopbar();
   render();
   save();
+}
+
+function layout() {
+  const visible = split ? [split.left, split.right] : [state.activeId];
+  $('#terminals').classList.toggle('split', !!split);
+  for (const [id, rt] of runtime) {
+    rt.el.classList.toggle('visible', visible.includes(id));
+    rt.el.classList.toggle('pane-left', !!split && id === split.left);
+    rt.el.classList.toggle('pane-right', !!split && id === split.right);
+    rt.el.classList.toggle('pane-focus', !!split && id === state.activeId);
+    rt.el.querySelector('.pane-name').textContent = sessionById(id)?.name || '';
+  }
+  requestAnimationFrame(() => visible.forEach((id) => runtime.get(id) && safeFit(runtime.get(id))));
+}
+
+function openSplit(id) {
+  const s = sessionById(id);
+  if (!s || id === state.activeId) return;
+  if (!split) split = { left: state.activeId, right: id };
+  else if (split.left !== id && split.right !== id) {
+    if (split.left === state.activeId) split.right = id;
+    else split.left = id;
+  }
+  activate(id);
+}
+
+function closeSplit() {
+  split = null;
+  layout();
+  render();
+  runtime.get(state.activeId)?.term.focus();
+}
+
+// Ctrl+Maj+E : ouvre à côté la dernière discussion utilisée, ou referme le panneau.
+function toggleSplit() {
+  if (split) return closeSplit();
+  const other = [...lastUsed.entries()].filter(([id]) => id !== state.activeId && sessionById(id)).sort((a, b) => b[1] - a[1])[0]?.[0] || visibleOrder().find((id) => id !== state.activeId);
+  if (other) openSplit(other);
 }
 
 function showEmpty() {
@@ -606,6 +658,16 @@ function closeSession(id, force) {
   const visible = visibleOrder();
   const idx = visible.indexOf(id);
   state.sessions = state.sessions.filter((x) => x.id !== id);
+  if (split && (split.left === id || split.right === id)) {
+    const other = split.left === id ? split.right : split.left;
+    split = null;
+    if (state.activeId === id) {
+      activate(other);
+      save();
+      return;
+    }
+    layout();
+  }
   if (state.activeId === id) {
     const next = visible[idx + 1] || visible[idx - 1];
     if (next && next !== id) activate(next);
@@ -771,7 +833,7 @@ const KIND_ICON = { shell: '›_', claude: '✳', sandbox: '⧉' };
 
 function sessionEl(s) {
   const el = document.createElement('div');
-  el.className = `session ${s.kind}` + (s.id === state.activeId ? ' active' : '');
+  el.className = `session ${s.kind}` + (s.id === state.activeId ? ' active' : split && (split.left === s.id || split.right === s.id) ? ' in-split' : '');
   el.dataset.session = s.id;
   el.draggable = true;
   const color = colorOf(s);
@@ -1035,6 +1097,8 @@ function sessionMenu(e, s) {
     if (s.sbx) sbxSessionMenu(m, s);
     menuItem(m, 'Renommer', () => startRename('session', s.id));
     menuItem(m, 'Dupliquer', () => duplicateSession(s.id));
+    if (s.id !== state.activeId) menuItem(m, '◫ Ouvrir à côté', () => openSplit(s.id));
+    if (split && (split.left === s.id || split.right === s.id)) menuItem(m, '◫ Fermer le panneau', closeSplit);
     menuItem(m, rt?.running ? 'Redémarrer' : 'Démarrer', () => {
       activate(s.id);
       startSession(s);
@@ -1208,7 +1272,7 @@ function openSettings() {
       <label class="check"><input type="checkbox" name="restore" ${st.restore ? 'checked' : ''}> Retrouver le contenu des terminaux au redémarrage</label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
-      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl +/− taille</small>
+      <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl+Maj+E côte à côte · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
     </form>`, (modal) => {
     const form = modal.querySelector('form');
@@ -1332,7 +1396,7 @@ function isShortcut(e) {
   if (e.ctrlKey && e.key === 'Tab') return true;
   if (e.key === 'F2') return true;
   if (mod && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) return true;
-  if (mod && e.shiftKey && ['t', 'n', 'd', 'w', 'f', 'b', 'u', 'p'].includes(key)) return true;
+  if (mod && e.shiftKey && ['t', 'n', 'd', 'w', 'f', 'b', 'u', 'p', 'e'].includes(key)) return true;
   if (e.ctrlKey && (e.key === 'PageDown' || e.key === 'PageUp')) return true;
   return false;
 }
@@ -1363,6 +1427,7 @@ function handleShortcut(e) {
   if (key === 'b') return toggleSidebar();
   if (key === 'u') return jumpToAttention();
   if (key === 'p') return $('#palette').hidden ? openPalette() : closePalette();
+  if (key === 'e') return toggleSplit();
 }
 
 function toggleSidebar() {
@@ -1442,6 +1507,24 @@ function bindUI() {
   });
   window.addEventListener('blur', closeMenu);
   $('#modal-backdrop').addEventListener('mousedown', (e) => e.target.id === 'modal-backdrop' && closeModal());
+
+  // Partage entre les deux panneaux.
+  const divider = $('#split-divider');
+  divider.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const box = $('#terminals').getBoundingClientRect();
+    const move = (ev) => {
+      const ratio = Math.max(20, Math.min(80, ((ev.clientX - box.left) / box.width) * 100));
+      $('#terminals').style.setProperty('--split', ratio + '%');
+      layout();
+    };
+    const up = () => {
+      removeEventListener('mousemove', move);
+      removeEventListener('mouseup', up);
+    };
+    addEventListener('mousemove', move);
+    addEventListener('mouseup', up);
+  });
 
   // Largeur de la barre latérale.
   const resizer = $('#resizer');
