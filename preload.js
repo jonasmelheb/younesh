@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('younesh', {
   gitBranches: (dirs) => ipcRenderer.invoke('git:branches', dirs),
   openJson: () => ipcRenderer.invoke('file:openJson'),
   saveJson: (name, text) => ipcRenderer.invoke('file:saveJson', name, text),
+  setChrome: (opts) => ipcRenderer.send('win:chrome', opts),
   flash: () => ipcRenderer.send('win:flash'),
   focusWindow: () => ipcRenderer.send('win:focus'),
   pathForFile: (file) => webUtils.getPathForFile(file),

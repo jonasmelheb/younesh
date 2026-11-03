@@ -169,6 +169,17 @@ ipcMain.handle('file:saveJson', async (_e, name, text) => {
   if (!res.canceled) fs.writeFileSync(res.filePath, text);
   return !res.canceled;
 });
+// Couleurs de la fenêtre selon le thème, et effet Mica (Windows 11) ou vibrance (macOS).
+ipcMain.on('win:chrome', (_e, { bg, fg, material }) => {
+  if (!win) return;
+  win.setBackgroundColor(material ? '#00000000' : bg);
+  if (isWin) {
+    win.setTitleBarOverlay?.({ color: bg, symbolColor: fg });
+    win.setBackgroundMaterial?.(material ? 'mica' : 'none');
+  } else if (process.platform === 'darwin') {
+    win.setVibrancy(material ? 'sidebar' : null);
+  }
+});
 ipcMain.on('win:flash', () => win && !win.isFocused() && win.flashFrame(true));
 ipcMain.on('win:focus', () => {
   if (!win) return;

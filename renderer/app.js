@@ -4,13 +4,6 @@ const api = window.younesh;
 const $ = (sel) => document.querySelector(sel);
 
 const COLORS = ['#ff6b6b', '#ff9f43', '#feca57', '#4ade80', '#2dd4bf', '#38bdf8', '#7c9cff', '#a78bfa', '#f472b6', '#e8a87c', '#94a3b8'];
-const THEME = {
-  background: '#0e0f13', foreground: '#e6e8ee', cursor: '#e6e8ee', cursorAccent: '#0e0f13',
-  selectionBackground: '#3a4a7a',
-  black: '#1c1f27', red: '#ff6b6b', green: '#4ade80', yellow: '#feca57', blue: '#7c9cff', magenta: '#c084fc', cyan: '#2dd4bf', white: '#d4d7e0',
-  brightBlack: '#5b6070', brightRed: '#ff8787', brightGreen: '#86efac', brightYellow: '#fde68a', brightBlue: '#a5b8ff', brightMagenta: '#d8b4fe', brightCyan: '#5eead4', brightWhite: '#ffffff',
-};
-
 let info = { platform: 'win32', home: '' };
 let shells = [];
 let state = { folders: [], sessions: [], activeId: null, settings: {} };
@@ -43,6 +36,10 @@ function settings() {
     gpu: true,
     notify: true,
     restore: true,
+    theme: 'sombre',
+    cursorStyle: 'block',
+    cursorBlink: true,
+    material: false,
     scrollback: 10000,
     ...state.settings,
   };
@@ -66,6 +63,8 @@ async function init() {
     settings: stored.settings || {},
   };
   document.documentElement.style.setProperty('--sidebar-w', settings().sidebarWidth + 'px');
+  applyAppearance();
+  darkQuery.addEventListener('change', () => settings().theme === 'auto' && applyAppearance());
   if (settings().restore) savedBuffers = await api.loadBuffers();
   window.addEventListener('beforeunload', () => api.saveBuffers(collectBuffers()));
   setInterval(() => api.saveBuffers(collectBuffers()), 60000);
@@ -122,10 +121,11 @@ function ensureTerminal(s) {
     fontFamily: st.fontFamily,
     fontSize: st.fontSize,
     lineHeight: 1.15,
-    cursorBlink: true,
+    cursorBlink: st.cursorBlink,
+    cursorStyle: st.cursorStyle,
     allowProposedApi: true,
     scrollback: st.scrollback,
-    theme: THEME,
+    theme: themeOf(st.theme).term,
     macOptionIsMeta: true,
   });
   const fit = new FitAddon.FitAddon();
@@ -698,7 +698,7 @@ function matches(s) {
   return s.name.toLowerCase().includes(q) || (s.cwd || '').toLowerCase().includes(q) || (folderById(s.folderId)?.name || '').toLowerCase().includes(q);
 }
 
-const FOLDER_SVG = (color) => `<svg class="folder-icon" viewBox="0 0 16 16"><path d="M1.5 3.2c0-.4.3-.7.7-.7h3.6l1.5 1.5h6.5c.4 0 .7.3.7.7v8.1c0 .4-.3.7-.7.7H2.2c-.4 0-.7-.3-.7-.7z" fill="${color || '#5b6070'}" fill-opacity=".9"/></svg>`;
+const FOLDER_SVG = (color) => `<svg class="folder-icon" viewBox="0 0 16 16"><path d="M1.5 3.2c0-.4.3-.7.7-.7h3.6l1.5 1.5h6.5c.4 0 .7.3.7.7v8.1c0 .4-.3.7-.7.7H2.2c-.4 0-.7-.3-.7-.7z" style="fill:${color || 'var(--muted-2)'}" fill-opacity=".9"/></svg>`;
 const CHEV_SVG = '<svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
 function render() {
@@ -1044,11 +1044,11 @@ function sessionMenu(e, s) {
     for (const f of state.folders) {
       if (f.id === s.folderId) continue;
       const item = document.createElement('span');
-      item.innerHTML = `<span class="sw" style="background:${f.color || '#5b6070'}"></span>`;
+      item.innerHTML = `<span class="sw" style="background:${f.color || 'var(--muted-2)'}"></span>`;
       item.append(document.createTextNode(f.name));
       menuItem(m, item.innerHTML, () => moveSession(s.id, f.id, null));
     }
-    if (s.folderId) menuItem(m, '<span class="sw" style="border:1px solid #5b6070"></span>Sans dossier', () => moveSession(s.id, null, null));
+    if (s.folderId) menuItem(m, '<span class="sw" style="border:1px solid var(--muted-2)"></span>Sans dossier', () => moveSession(s.id, null, null));
     menuItem(m, '+ Nouveau dossier…', () => {
       const f = createFolder(false);
       moveSession(s.id, f.id, null);
@@ -1191,6 +1191,14 @@ function openSettings() {
         <div class="row"><input name="defaultCwd" value="${esc(st.defaultCwd)}" spellcheck="false"><button type="button" id="browse">Parcourir…</button></div>
       </div>
       <div class="field"><span>Sandbox sbx</span><div class="row"><button type="button" id="sbx-setup">Préparer le poste…</button><button type="button" id="sbx-config">Configurer sbx…</button></div></div>
+      <div class="field"><span>Apparence</span>
+        <div class="row">
+          <select name="theme">${[['auto', 'Automatique (comme Windows)'], ...Object.entries(THEMES).map(([id, t]) => [id, t.name])].map(([id, n]) => `<option value="${id}" ${id === st.theme ? 'selected' : ''}>${n}</option>`).join('')}</select>
+          <select name="cursorStyle">${[['block', 'Curseur bloc'], ['bar', 'Curseur barre'], ['underline', 'Curseur souligné']].map(([id, n]) => `<option value="${id}" ${id === st.cursorStyle ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="cursorBlink" ${st.cursorBlink ? 'checked' : ''}> Curseur clignotant</label>
+      <label class="check"><input type="checkbox" name="material" ${st.material ? 'checked' : ''}> Barre latérale translucide (effet Mica de Windows 11, expérimental)</label>
       <label class="field"><span>Police</span><input name="fontFamily" value="${esc(st.fontFamily)}" spellcheck="false"></label>
       <label class="field"><span>Taille du texte</span><input name="fontSize" type="number" min="9" max="28" value="${st.fontSize}"></label>
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
@@ -1212,8 +1220,9 @@ function openSettings() {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(form));
       const gpuChanged = !!data.gpu !== settings().gpu;
-      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify, restore: !!data.restore };
+      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify, restore: !!data.restore, cursorBlink: !!data.cursorBlink, material: !!data.material };
       applyFont();
+      applyAppearance();
       if (gpuChanged) alert('L\'accélération graphique changera au prochain démarrage de Younesh.');
       save();
       closeModal();
@@ -1228,6 +1237,19 @@ function applyFont() {
     rt.term.options.fontFamily = st.fontFamily;
     rt.term.options.scrollback = st.scrollback;
     safeFit(rt);
+  }
+}
+
+function applyAppearance() {
+  const st = settings();
+  const theme = themeOf(st.theme);
+  for (const [k, v] of Object.entries(theme.ui)) document.documentElement.style.setProperty('--' + k, v);
+  document.documentElement.classList.toggle('material', st.material);
+  api.setChrome({ bg: theme.ui.bg, fg: theme.ui.text, material: st.material });
+  for (const rt of runtime.values()) {
+    rt.term.options.theme = theme.term;
+    rt.term.options.cursorStyle = st.cursorStyle;
+    rt.term.options.cursorBlink = st.cursorBlink;
   }
 }
 
