@@ -89,7 +89,30 @@ function detectShells() {
   return shells;
 }
 
+// Branche git lue directement dans .git/HEAD : pas de processus git lancé.
+function gitBranch(dir) {
+  for (let d = dir, i = 0; d && i < 40; i++) {
+    const dotGit = path.join(d, '.git');
+    try {
+      let gitDir = dotGit;
+      if (fs.statSync(dotGit).isFile()) {
+        const m = /gitdir:\s*(.+)/.exec(fs.readFileSync(dotGit, 'utf8'));
+        if (!m) return null;
+        gitDir = path.resolve(d, m[1].trim());
+      }
+      const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+      const ref = /^ref: refs\/heads\/(.+)$/.exec(head);
+      return ref ? ref[1] : head.slice(0, 7);
+    } catch {}
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return null;
+}
+
 ipcMain.handle('store:load', () => loadStore());
+ipcMain.handle('git:branches', (_e, dirs) => Object.fromEntries(dirs.map((d) => [d, gitBranch(d)])));
 ipcMain.handle('store:save', (_e, data) => {
   const store = loadStore();
   saveStore({ ...data, window: store.window });

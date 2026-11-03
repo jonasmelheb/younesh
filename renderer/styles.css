@@ -128,6 +128,7 @@ button.danger { color: var(--danger); }
 .session .info { flex: 1; min-width: 0; }
 .session .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session .sub { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session .sub .branch { color: #a5b8ff; margin-right: 6px; }
 .session .kind { font-size: 12px; width: 16px; text-align: center; color: var(--muted); flex-shrink: 0; }
 .session.claude .kind { color: #e8a87c; }
 

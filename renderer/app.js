@@ -18,6 +18,7 @@ const runtime = new Map(); // id -> { term, fit, el, running, unread, exited, bu
 // Claude anime son indicateur tant qu'il travaille : un silence de cette durée veut dire qu'il attend.
 const CLAUDE_QUIET_MS = 3000;
 let saveTimer = null;
+let branches = {}; // dossier -> branche git
 let search = '';
 
 const isMac = () => info.platform === 'darwin';
@@ -27,6 +28,8 @@ const folderById = (id) => state.folders.find((f) => f.id === id);
 const basename = (p) => (p || '').split(/[\\/]/).filter(Boolean).pop() || p || '';
 const shortPath = (p) => (p && info.home && p.startsWith(info.home) ? '~' + p.slice(info.home.length) : p || '~');
 const colorOf = (s) => s.color || folderById(s.folderId)?.color || null;
+// Dossier courant : celui annoncé par le shell (OSC 7 ou 9;9) s'il le fait, sinon celui de départ.
+const cwdOf = (s) => runtime.get(s.id)?.cwd || s.cwd;
 
 function settings() {
   return {
@@ -92,10 +95,12 @@ async function init() {
       }
     }
   }, 1000);
+  setInterval(refreshBranches, 4000);
   window.addEventListener('focus', () => clearAttention(state.activeId));
 
   bindUI();
   render();
+  refreshBranches();
   if (state.activeId && sessionById(state.activeId)) activate(state.activeId);
   else if (state.sessions[0]) activate(state.sessions[0].id);
   else showEmpty();
@@ -137,7 +142,17 @@ function ensureTerminal(s) {
   });
   // Sonnerie et notifications envoyées par les programmes (OSC 9 iTerm2, OSC 777 Ghostty, OSC 99 kitty).
   term.onBell(() => attention(s.id, 'Le terminal te signale quelque chose'));
-  term.parser.registerOscHandler(9, (text) => (/^\d+;/.test(text) ? false : (attention(s.id, text), true)));
+  term.parser.registerOscHandler(7, (uri) => {
+    const m = /^file:\/\/[^/]*(\/.*)$/.exec(uri);
+    if (m) setLiveCwd(s.id, decodeURIComponent(m[1]).replace(/^\/([A-Za-z]:)/, '$1'));
+    return true;
+  });
+  term.parser.registerOscHandler(9, (text) => {
+    if (text.startsWith('9;')) return setLiveCwd(s.id, text.slice(2).replace(/^"|"$/g, '')), true;
+    if (/^\d+;/.test(text)) return false;
+    attention(s.id, text);
+    return true;
+  });
   term.parser.registerOscHandler(777, (text) => {
     const [kind, title, body] = text.split(';');
     if (kind === 'notify') attention(s.id, body || title);
@@ -157,6 +172,24 @@ function enableGpu(term) {
     gpu.onContextLoss(() => gpu.dispose());
     term.loadAddon(gpu);
   } catch {}
+}
+
+function setLiveCwd(id, dir) {
+  const rt = runtime.get(id);
+  if (!rt || !dir || rt.cwd === dir) return;
+  rt.cwd = dir;
+  refreshBranches();
+  if (id === state.activeId) updateTopbar();
+}
+
+async function refreshBranches() {
+  const dirs = [...new Set(state.sessions.map(cwdOf).filter(Boolean))];
+  if (!dirs.length) return;
+  const next = await api.gitBranches(dirs);
+  if (dirs.every((d) => next[d] === branches[d]) && Object.keys(next).length === Object.keys(branches).length) return;
+  branches = next;
+  render();
+  updateTopbar();
 }
 
 function attention(id, message) {
@@ -349,6 +382,7 @@ function createSession(opts) {
     if (f) f.collapsed = false;
   }
   activate(s.id);
+  refreshBranches();
   return s;
 }
 
@@ -524,9 +558,11 @@ function sessionEl(s) {
   if (color) el.style.setProperty('--folder-color', color);
   el.innerHTML = `<span class="kind">${KIND_ICON[s.kind] || '›_'}</span><div class="info"><div class="name"></div><div class="sub"></div></div><span class="dot"></span>`;
   el.querySelector('.name').textContent = s.name;
-  el.querySelector('.sub').textContent = shortPath(s.cwd);
+  const branch = branches[cwdOf(s)];
+  if (branch) el.querySelector('.sub').append(Object.assign(document.createElement('span'), { className: 'branch', textContent: '⎇ ' + branch }));
+  el.querySelector('.sub').append(shortPath(cwdOf(s)));
   if (s.color) el.querySelector('.kind').style.color = s.color;
-  el.title = `${s.name}\n${s.cwd || ''}`;
+  el.title = `${s.name}\n${cwdOf(s) || ''}${branch ? `\nBranche : ${branch}` : ''}`;
   el.addEventListener('click', () => activate(s.id));
   el.addEventListener('dblclick', () => startRename('session', s.id));
   el.addEventListener('contextmenu', (e) => sessionMenu(e, s));
@@ -553,7 +589,8 @@ function updateDot(id) {
 function updateTopbar() {
   const s = sessionById(state.activeId);
   $('#active-title').textContent = s ? s.name : '';
-  $('#active-path').textContent = s ? shortPath(s.cwd) : '';
+  const branch = s && branches[cwdOf(s)];
+  $('#active-path').textContent = s ? shortPath(cwdOf(s)) + (branch ? `  ⎇ ${branch}` : '') : '';
   $('#active-dot').style.visibility = s ? 'visible' : 'hidden';
   if (s) setDot($('#active-dot'), s.id);
   document.title = s ? `${s.name} — Younesh` : 'Younesh';
@@ -913,6 +950,7 @@ function openEditDialog(s) {
       Object.assign(s, { name: data.name.trim() || s.name, shell: data.shell, cwd: data.cwd, folderId: data.folderId, command: data.command, claudeArgs: data.claudeArgs });
       render();
       updateTopbar();
+      refreshBranches();
       save();
       if (relaunch && runtime.get(s.id)?.running && confirm('Relancer la discussion avec ces réglages ?')) startSession(s);
     }, true);
@@ -998,7 +1036,7 @@ function changeFontSize(delta) {
 
 function quickNew(kind) {
   const active = sessionById(state.activeId);
-  createSession({ kind, folderId: active?.folderId ?? null, cwd: active?.cwd });
+  createSession({ kind, folderId: active?.folderId ?? null, cwd: active && cwdOf(active) });
 }
 
 function isShortcut(e) {
