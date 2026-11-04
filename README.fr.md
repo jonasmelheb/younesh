@@ -35,6 +35,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 
   Le bouton ⧉ sert aussi à **ouvrir une sandbox existante** : Younesh liste celles du PC (`sbx ls`), même créées dans un autre terminal, et la rouvre dans une discussion.
   La configuration reste sur le PC et s'importe ou s'exporte en JSON (clic droit sur ⧉, Configurer sbx). Variables : `{projet}`, `{dossier}`, `{script}`, et `{secret:NOM}`, demandé au lancement et jamais enregistré.
+- **SSH et tunnels** (à activer dans les Réglages) : le bouton serveur ajoute des connexions SSH dans la barre latérale, comme n'importe quelle discussion, ou les importe depuis `~/.ssh/config`. Younesh lance le client OpenSSH livré avec Windows : les clés, l'agent SSH et `known_hosts` marchent comme d'habitude. Les **tunnels** (redirection de ports) tournent en arrière-plan, chacun avec son interrupteur : local (`-L`, la base de données d'un serveur sur `localhost`), distant (`-R`) ou proxy SOCKS (`-D`). Quand ssh demande un mot de passe, une phrase de passe ou de confirmer un nouveau serveur, Younesh pose la question dans une petite fenêtre. Un tunnel qui coupe se relance tout seul, et un tunnel peut s'ouvrir au démarrage de Younesh. Aucun mot de passe n'est enregistré.
 - **Commande au démarrage** : par exemple `npm run dev` pour un serveur qui se relance d'un clic.
 - **Tout lancer** : ▶ sur un dossier démarre toutes ses discussions (serveur, Claude, tests…) d'un coup ; « Tout arrêter » les coupe.
 - **Côte à côte** : deux discussions l'une à côté de l'autre, avec un séparateur déplaçable.

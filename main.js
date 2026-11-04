@@ -134,6 +134,18 @@ async function freshEnv() {
   return cleanEnv(env);
 }
 
+// Chemin complet d'un programme d'après le Path donné : sous Windows, node-pty le chercherait sinon
+// dans le PATH de Younesh, peut-être ancien.
+function which(env, name) {
+  if (!isWin) return name;
+  const key = Object.keys(env).find((k) => k.toLowerCase() === 'path');
+  for (const dir of (env[key] || '').split(';')) {
+    const file = path.join(dir.trim().replace(/"/g, ''), name + '.exe');
+    if (dir.trim() && fs.existsSync(file)) return file;
+  }
+  return name;
+}
+
 function detectShells() {
   const shells = [];
   const exists = (p) => { try { return fs.existsSync(p); } catch { return false; } };
@@ -209,11 +221,17 @@ ipcMain.handle('dialog:folder', async (_e, defaultPath) => {
   return res.canceled ? null : res.filePaths[0];
 });
 
-ipcMain.handle('pty:spawn', async (e, { id, shellPath, args, cwd, cols, rows }) => {
+ipcMain.handle('dialog:file', async (_e, defaultPath) => {
+  const res = await dialog.showOpenDialog(win, { properties: ['openFile', 'showHiddenFiles'], defaultPath });
+  return res.canceled ? null : res.filePaths[0];
+});
+
+// program : un programme lancé sans shell (ssh), cherché dans le Path relu.
+ipcMain.handle('pty:spawn', async (e, { id, shellPath, program, args, cwd, cols, rows }) => {
   const env = await freshEnv();
   ptys.get(id)?.kill();
   const dir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
-  const term = pty.spawn(shellPath, args || [], {
+  const term = pty.spawn(program ? which(env, program) : shellPath, args || [], {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,
@@ -250,6 +268,41 @@ ipcMain.handle('sbx:list', async () => {
       resolve({ error: 'Réponse de « sbx ls » illisible.' });
     }
   }));
+});
+
+// Tunnels SSH : un « ssh -N » par tunnel, dans un pseudo-terminal caché pour qu'il puisse demander un mot de passe
+// ou faire confirmer un nouveau serveur. La fenêtre affiche ces questions et renvoie la réponse.
+const tunnels = new Map();
+ipcMain.handle('tunnel:start', async (e, id, args) => {
+  const env = await freshEnv();
+  tunnels.get(id)?.kill();
+  let term;
+  try {
+    term = pty.spawn(which(env, 'ssh'), args, { name: 'xterm-256color', cols: 200, rows: 24, cwd: os.homedir(), env, useConpty: isWin ? true : undefined });
+  } catch (err) {
+    return { error: err.message };
+  }
+  tunnels.set(id, term);
+  term.onData((data) => !e.sender.isDestroyed() && e.sender.send('tunnel:data', id, data));
+  term.onExit(({ exitCode }) => {
+    if (tunnels.get(id) !== term) return;
+    tunnels.delete(id);
+    if (!e.sender.isDestroyed()) e.sender.send('tunnel:exit', id, exitCode);
+  });
+  return {};
+});
+ipcMain.on('tunnel:write', (_e, id, data) => tunnels.get(id)?.write(data));
+ipcMain.on('tunnel:stop', (_e, id) => {
+  const term = tunnels.get(id);
+  tunnels.delete(id);
+  term?.kill();
+});
+ipcMain.handle('ssh:config', () => {
+  try {
+    return fs.readFileSync(path.join(os.homedir(), '.ssh', 'config'), 'utf8');
+  } catch {
+    return '';
+  }
 });
 
 // Mises à jour depuis les versions GitHub. La version installée avec Younesh-Setup télécharge la nouvelle
@@ -331,6 +384,6 @@ app.whenReady().then(() => {
   createWindow();
 });
 app.on('window-all-closed', () => {
-  for (const term of ptys.values()) term.kill();
+  for (const term of [...ptys.values(), ...tunnels.values()]) term.kill();
   app.quit();
 });

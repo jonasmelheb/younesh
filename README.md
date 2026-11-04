@@ -35,6 +35,7 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 
   The ⧉ button also **opens an existing sandbox**: Younesh lists the ones on the PC (`sbx ls`), even those created in another terminal, and reopens it in a discussion.
   The configuration is stored locally and can be imported or exported as JSON (right-click ⧉ → Configure sbx). Placeholders: `{projet}`, `{dossier}`, `{script}`, and `{secret:NAME}`, asked when the command runs and never saved.
+- **SSH and tunnels** (turn on in Settings): the server button adds SSH connections to the sidebar, like any session, or imports them from `~/.ssh/config`. Younesh runs the OpenSSH client that ships with Windows, so keys, the SSH agent and `known_hosts` work as usual. **Tunnels** (port forwarding) run in the background, each with its own on/off switch: local (`-L`, a server's database on `localhost`), remote (`-R`) or a SOCKS proxy (`-D`). Younesh asks for a password, passphrase or new server fingerprint in a small window when ssh needs one, reopens a tunnel that drops, and can open tunnels when it starts. No password is ever saved.
 - **Startup command**: e.g. `npm run dev`, restarted in one click.
 - **Launch a whole folder**: ▶ on a folder starts all its sessions (server, Claude, tests…) at once; « Stop all » stops them.
 - **Side by side**: open two sessions next to each other, with a draggable divider.

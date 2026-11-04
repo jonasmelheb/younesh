@@ -37,6 +37,7 @@ function settings() {
     gpu: true,
     notify: false,
     autoUpdate: true,
+    ssh: false,
     restore: true,
     theme: 'sombre',
     cursorStyle: 'block',
@@ -63,6 +64,7 @@ async function init() {
     sessions: stored.sessions || [],
     activeId: stored.activeId || null,
     settings: stored.settings || {},
+    tunnels: stored.tunnels || [],
   };
   document.documentElement.style.setProperty('--sidebar-w', settings().sidebarWidth + 'px');
   applyAppearance();
@@ -102,11 +104,15 @@ async function init() {
       }
     }
   }, 1000);
+  api.onTunnelData(onTunnelData);
+  api.onTunnelExit(onTunnelExit);
   setInterval(refreshBranches, 4000);
   window.addEventListener('focus', () => clearAttention(state.activeId));
 
   bindUI();
   render();
+  applySshUi();
+  if (sshEnabled()) startAutoTunnels();
   refreshBranches();
   api.onUpdateReady((version) => toast(`Younesh ${version} est téléchargé : il s'installera à la fermeture.`, 30000, { label: 'Redémarrer maintenant', run: api.installUpdate }));
   checkUpdate();
@@ -229,7 +235,7 @@ function setLiveCwd(id, dir) {
 }
 
 async function refreshBranches() {
-  const dirs = [...new Set(state.sessions.map(cwdOf).filter(Boolean))];
+  const dirs = [...new Set(state.sessions.filter((s) => !s.ssh).map(cwdOf).filter(Boolean))];
   if (!dirs.length) return;
   const next = await api.gitBranches(dirs);
   if (dirs.every((d) => next[d] === branches[d]) && Object.keys(next).length === Object.keys(branches).length) return;
@@ -286,6 +292,12 @@ function paletteActions() {
     { label: 'Ouvrir une sandbox existante', run: () => openSbxExisting() },
     { label: 'Préparer le poste pour sbx', run: openSbxSetup },
     { label: 'Configurer sbx', run: openSbxConfig },
+    ...(sshEnabled() ? [
+      { label: 'Nouvelle connexion SSH', run: () => openSshDialog() },
+      { label: 'Importer les serveurs de ~/.ssh/config', run: () => openSshImport() },
+      { label: 'Tunnels SSH', run: () => openTunnels() },
+      { label: 'Nouveau tunnel SSH', run: () => openTunnelForm() },
+    ] : []),
     { label: 'Nouveau dossier', hint: 'Ctrl+Maj+D', run: () => createFolder() },
     { label: 'Chercher dans le terminal', hint: 'Ctrl+Maj+F', run: openFind },
     { label: 'Deux discussions côte à côte', hint: 'Ctrl+Maj+E', run: toggleSplit },
@@ -421,13 +433,13 @@ function find(dir, incremental = false) {
   else rt.search.findPrevious(q, opts);
 }
 
-// Seuls les terminaux classiques sont gardés : Claude et la sandbox réaffichent déjà leur conversation.
+// Seuls les terminaux classiques et SSH sont gardés : Claude et la sandbox réaffichent déjà leur conversation.
 function collectBuffers() {
   if (!settings().restore) return {};
   const out = { ...savedBuffers };
   for (const [id, rt] of runtime) {
     const s = sessionById(id);
-    if (s?.kind === 'shell') out[id] = rt.serialize.serialize({ scrollback: RESTORE_LINES });
+    if (s?.kind === 'shell' || s?.kind === 'ssh') out[id] = rt.serialize.serialize({ scrollback: RESTORE_LINES });
   }
   for (const id of Object.keys(out)) if (!sessionById(id)) delete out[id];
   return out;
@@ -470,17 +482,18 @@ async function startSession(s) {
   const rt = ensureTerminal(s);
   rt.el.querySelector('.exit-bar')?.remove();
   const shell = shells.find((x) => x.id === s.shell) || shells[0];
-  if (!shell) {
+  if (!shell && s.kind !== 'ssh') {
     rt.term.writeln('\x1b[31mAucun shell trouvé sur ce PC.\x1b[0m');
     return;
   }
-  const cmd = startupCommand(s, shell);
+  // Une connexion SSH lance ssh sans shell autour : quand elle se ferme, la barre propose de se reconnecter.
+  const run = s.kind === 'ssh' ? { program: 'ssh', args: sshArgs(s.ssh), cwd: info.home } : { shellPath: shell.path, args: shellArgs(shell, startupCommand(s, shell)), cwd: s.cwd };
   safeFit(rt);
   rt.running = true;
   rt.exited = false;
   updateDot(s.id);
   try {
-    await api.spawn({ id: s.id, shellPath: shell.path, args: shellArgs(shell, cmd), cwd: s.cwd, cols: rt.term.cols, rows: rt.term.rows });
+    await api.spawn({ id: s.id, ...run, cols: rt.term.cols, rows: rt.term.rows });
     if (s.kind === 'claude' && !s.claudeStarted) {
       s.claudeStarted = true;
       save();
@@ -498,7 +511,9 @@ async function startSession(s) {
     }
   } catch (err) {
     rt.running = false;
-    rt.term.writeln(`\x1b[31mImpossible de lancer ${shell.name} : ${err.message}\x1b[0m`);
+    rt.term.writeln(s.kind === 'ssh'
+      ? '\x1b[31mssh est introuvable sur ce PC. Installe le « Client OpenSSH » : Paramètres › Système › Fonctionnalités facultatives.\x1b[0m'
+      : `\x1b[31mImpossible de lancer ${shell.name} : ${err.message}\x1b[0m`);
     updateDot(s.id);
   }
 }
@@ -509,8 +524,9 @@ function showExitBar(id, code) {
   rt.el.querySelector('.exit-bar')?.remove();
   const bar = document.createElement('div');
   bar.className = 'exit-bar';
-  bar.innerHTML = `<span>Processus terminé${code ? ` (code ${code})` : ''}</span>`;
-  const restart = button('Relancer', 'primary', () => startSession(sessionById(id)));
+  const ssh = sessionById(id)?.kind === 'ssh';
+  bar.innerHTML = `<span>${ssh ? 'Connexion fermée' : 'Processus terminé'}${code ? ` (code ${code})` : ''}</span>`;
+  const restart = button(ssh ? 'Se reconnecter' : 'Relancer', 'primary', () => startSession(sessionById(id)));
   const close = button('Fermer', '', () => closeSession(id, true));
   bar.append(restart, close);
   rt.el.appendChild(bar);
@@ -630,6 +646,7 @@ function createSession(opts) {
     color: null,
   };
   if (opts.sbx) s.sbx = { ...opts.sbx };
+  if (opts.ssh) s.ssh = { ...opts.ssh };
   if (s.kind === 'claude') {
     s.claudeId = uid();
     s.claudeStarted = false;
@@ -637,12 +654,18 @@ function createSession(opts) {
   if (!s.name) {
     const shellName = shells.find((x) => x.id === s.shell)?.name || 'Terminal';
     const label = { claude: 'Claude', sandbox: 'Sandbox' }[s.kind] || shellName;
-    s.name = `${label} · ${basename(s.cwd)}`;
+    s.name = s.ssh ? sshTarget(s.ssh) : `${label} · ${basename(s.cwd)}`;
   }
   state.sessions.push(s);
   if (s.folderId) {
     const f = folderById(s.folderId);
     if (f) f.collapsed = false;
+  }
+  // background : ajoutée sans l'ouvrir (import de plusieurs serveurs SSH).
+  if (opts.background) {
+    render();
+    save();
+    return s;
   }
   activate(s.id);
   refreshBranches();
@@ -660,7 +683,10 @@ function closeSession(id, force) {
   const s = sessionById(id);
   if (!s) return;
   const rt = runtime.get(id);
-  if (!force && rt?.running && !confirm(`Fermer « ${s.name} » ? Le processus en cours sera arrêté.`)) return;
+  const running = !force && rt?.running;
+  const linked = tunnelsOf(id);
+  if ((running || linked.length) && !confirm(`Fermer « ${s.name} » ?${running ? ' Le processus en cours sera arrêté.' : ''}${linked.length ? ` Ses ${linked.length} tunnel(s) seront supprimés.` : ''}`)) return;
+  linked.forEach(deleteTunnel);
   api.kill(id);
   if (rt) {
     rt.term.dispose();
@@ -841,7 +867,7 @@ function render() {
   tree.scrollTop = scroll;
 }
 
-const KIND_ICON = { shell: '›_', claude: '✳', sandbox: '⧉' };
+const KIND_ICON = { shell: '›_', claude: '✳', sandbox: '⧉', ssh: SSH_ICON };
 
 function sessionEl(s) {
   const el = document.createElement('div');
@@ -852,12 +878,18 @@ function sessionEl(s) {
   if (color) el.style.setProperty('--folder-color', color);
   el.innerHTML = `<span class="kind">${KIND_ICON[s.kind] || '›_'}</span><div class="info"><div class="name"></div><div class="sub"></div></div><span class="dot"></span>`;
   el.querySelector('.name').textContent = s.name;
-  const branch = branches[cwdOf(s)];
-  // Dans la liste : le nom et la branche en dessous. Le chemin reste dans la barre du haut et l'infobulle.
-  if (branch) el.querySelector('.sub').append(Object.assign(document.createElement('span'), { className: 'branch', textContent: '⎇ ' + branch }));
-  else el.querySelector('.sub').remove();
+  const branch = s.ssh ? null : branches[cwdOf(s)];
+  // Dans la liste : le nom et la branche en dessous (le serveur pour SSH). Le chemin reste dans la barre du haut et l'infobulle.
+  const sub = el.querySelector('.sub');
+  if (branch) sub.append(Object.assign(document.createElement('span'), { className: 'branch', textContent: '⎇ ' + branch }));
+  if (s.ssh) {
+    const open = tunnelsOf(s.id).filter(tunnelOpen).length;
+    sub.textContent = sshLabel(s.ssh);
+    if (open) sub.append(Object.assign(document.createElement('span'), { className: 'tunnels', textContent: `⇄ ${open}` }));
+  }
+  if (!sub.childNodes.length) sub.remove();
   if (s.color) el.querySelector('.kind').style.color = s.color;
-  el.title = `${s.name}\n${cwdOf(s) || ''}${branch ? `\nBranche : ${branch}` : ''}`;
+  el.title = s.ssh ? `${s.name}\n${sshCommandLine(s.ssh)}` : `${s.name}\n${cwdOf(s) || ''}${branch ? `\nBranche : ${branch}` : ''}`;
   el.addEventListener('click', () => activate(s.id));
   el.addEventListener('dblclick', () => startRename('session', s.id));
   el.addEventListener('contextmenu', (e) => sessionMenu(e, s));
@@ -884,8 +916,10 @@ function updateDot(id) {
 function updateTopbar() {
   const s = sessionById(state.activeId);
   $('#active-title').textContent = s ? s.name : '';
-  const branch = s && branches[cwdOf(s)];
-  $('#active-path').textContent = s ? shortPath(cwdOf(s)) + (branch ? `  ⎇ ${branch}` : '') : '';
+  const branch = s && !s.ssh && branches[cwdOf(s)];
+  // SSH : le serveur, puis le dossier distant si son shell l'annonce (OSC 7).
+  const remote = s?.ssh && runtime.get(s.id)?.cwd;
+  $('#active-path').textContent = !s ? '' : s.ssh ? sshLabel(s.ssh) + (remote ? `  ${remote}` : '') : shortPath(cwdOf(s)) + (branch ? `  ⎇ ${branch}` : '');
   $('#active-dot').style.visibility = s ? 'visible' : 'hidden';
   if (s) setDot($('#active-dot'), s.id);
   document.title = s ? `${s.name} — Younesh` : 'Younesh';
@@ -1108,6 +1142,7 @@ function folderMenu(e, f) {
     menuItem(m, '✳ Nouvelle discussion Claude ici', () => openNewDialog({ folderId: f.id, kind: 'claude' }));
     menuItem(m, '⧉ Nouvelle sandbox ici', () => openSbxNew({ folderId: f.id }));
     menuItem(m, '⧉ Ouvrir une sandbox existante ici', () => openSbxExisting({ folderId: f.id }));
+    if (sshEnabled()) menuItem(m, `${SSH_ICON} Nouvelle connexion SSH ici`, () => openSshDialog(null, { folderId: f.id }));
     menuSep(m);
     menuItem(m, '▶ Tout lancer', () => launchFolder(f));
     menuItem(m, '■ Tout arrêter', () => stopFolder(f));
@@ -1132,16 +1167,17 @@ function sessionMenu(e, s) {
   const rt = runtime.get(s.id);
   openMenu(e, (m) => {
     if (s.sbx) sbxSessionMenu(m, s);
+    if (s.ssh) sshSessionMenu(m, s);
     menuItem(m, 'Renommer', () => startRename('session', s.id));
     menuItem(m, 'Dupliquer', () => duplicateSession(s.id));
     if (s.id !== state.activeId) menuItem(m, '◫ Ouvrir à côté', () => openSplit(s.id));
     if (split && (split.left === s.id || split.right === s.id)) menuItem(m, '◫ Fermer le panneau', closeSplit);
-    menuItem(m, rt?.running ? 'Redémarrer' : 'Démarrer', () => {
+    menuItem(m, s.ssh ? (rt?.running ? 'Se reconnecter' : 'Se connecter') : rt?.running ? 'Redémarrer' : 'Démarrer', () => {
       activate(s.id);
       startSession(s);
     });
-    menuItem(m, 'Modifier…', () => openEditDialog(s));
-    menuItem(m, 'Copier le chemin', () => api.copy(s.cwd || ''));
+    menuItem(m, 'Modifier…', () => (s.ssh ? openSshDialog(s) : openEditDialog(s)));
+    if (!s.ssh) menuItem(m, 'Copier le chemin', () => api.copy(s.cwd || ''));
     menuSep(m);
     m.appendChild(Object.assign(document.createElement('div'), { className: 'menu-label', textContent: 'Ranger dans' }));
     for (const f of state.folders) {
@@ -1184,7 +1220,7 @@ function openModal(html, onReady) {
   modal.innerHTML = html;
   $('#modal-backdrop').hidden = false;
   onReady(modal);
-  modal.querySelector('input, select')?.focus();
+  if (!modal.contains(document.activeElement)) modal.querySelector('input, select')?.focus();
 }
 
 function closeModal() {
@@ -1309,6 +1345,7 @@ function openSettings() {
       <label class="check"><input type="checkbox" name="restore" ${st.restore ? 'checked' : ''}> Retrouver le contenu des terminaux au redémarrage</label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
       <label class="check"><input type="checkbox" name="autoUpdate" ${st.autoUpdate ? 'checked' : ''}> Mettre à jour Younesh automatiquement (installé avec Younesh-Setup ; la portable et le .msi signalent les nouvelles versions)</label>
+      <label class="check"><input type="checkbox" name="ssh" ${st.ssh ? 'checked' : ''}> Activer SSH : connexions aux serveurs et tunnels (redirection de ports)</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
       <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+Q terminal dans le dossier personnel · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl+Maj+E côte à côte · Ctrl +/− taille</small>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
@@ -1327,9 +1364,13 @@ function openSettings() {
       e.preventDefault();
       const data = Object.fromEntries(new FormData(form));
       const gpuChanged = !!data.gpu !== settings().gpu;
-      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify, autoUpdate: !!data.autoUpdate, restore: !!data.restore, cursorBlink: !!data.cursorBlink, material: !!data.material };
+      const sshChanged = !!data.ssh !== settings().ssh;
+      state.settings = { ...state.settings, ...data, fontSize: Number(data.fontSize) || 14, scrollback: Number(data.scrollback) || 10000, gpu: !!data.gpu, notify: !!data.notify, autoUpdate: !!data.autoUpdate, ssh: !!data.ssh, restore: !!data.restore, cursorBlink: !!data.cursorBlink, material: !!data.material };
       applyFont();
       applyAppearance();
+      // Désactiver SSH ferme les tunnels ; les discussions SSH restent dans la liste.
+      if (sshChanged) data.ssh ? startAutoTunnels() : stopAllTunnels();
+      applySshUi();
       if (gpuChanged) alert('L\'accélération graphique changera au prochain démarrage de Younesh.');
       save();
       closeModal();
@@ -1357,7 +1398,7 @@ function applyFont() {
 
 function backupJson() {
   const sessions = state.sessions.map(({ prefill, ...s }) => s);
-  return JSON.stringify({ format: 'younesh-backup', version: 1, exportedAt: new Date().toISOString(), folders: state.folders, sessions, settings: state.settings }, null, 2);
+  return JSON.stringify({ format: 'younesh-backup', version: 1, exportedAt: new Date().toISOString(), folders: state.folders, sessions, tunnels: tunnelList(), settings: state.settings }, null, 2);
 }
 
 function exportBackup() {
@@ -1379,10 +1420,11 @@ function importBackupText(text) {
   if (data.format !== 'younesh-backup') return alert('Ce fichier n\'est pas une sauvegarde Younesh.');
   const newFolders = (data.folders || []).filter((f) => !folderById(f.id));
   const newSessions = (data.sessions || []).filter((s) => !sessionById(s.id));
+  const newTunnels = (data.tunnels || []).filter((t) => !tunnelById(t.id));
   openModal(`
     <h2>Importer une sauvegarde</h2>
     <form>
-      <label class="check"><input type="checkbox" name="items" checked> Ajouter ${newFolders.length} dossier(s) et ${newSessions.length} discussion(s) à ceux que tu as déjà</label>
+      <label class="check"><input type="checkbox" name="items" checked> Ajouter ${newFolders.length} dossier(s), ${newSessions.length} discussion(s)${newTunnels.length ? ` et ${newTunnels.length} tunnel(s)` : ''} à ceux que tu as déjà</label>
       <label class="check"><input type="checkbox" name="settings"> Remplacer mes réglages (thème, police, configuration sbx…)</label>
       <p class="hint">Rien n'est supprimé. Les dossiers de travail qui n'existent pas sur ce PC s'ouvriront dans ton dossier personnel.</p>
       <div class="modal-actions"><button type="button" id="cancel">Annuler</button><button type="submit" class="primary">Importer</button></div>
@@ -1394,12 +1436,14 @@ function importBackupText(text) {
       if (form.items.checked) {
         state.folders.push(...newFolders);
         state.sessions.push(...newSessions);
+        tunnelList().push(...newTunnels);
       }
       if (form.settings.checked && data.settings) state.settings = { ...data.settings, sidebarWidth: state.settings.sidebarWidth };
       closeModal();
       applyAppearance();
       applyFont();
       render();
+      applySshUi();
       refreshBranches();
       save();
       toast('Sauvegarde importée.', 3000);
@@ -1493,6 +1537,9 @@ function bindUI() {
   $('#btn-home').addEventListener('click', homeTerminal);
   $('#btn-sandbox').addEventListener('click', sbxButtonMenu);
   $('#btn-sandbox').addEventListener('contextmenu', sbxButtonMenu);
+  $('#btn-ssh').addEventListener('click', sshButtonMenu);
+  $('#btn-ssh').addEventListener('contextmenu', sshButtonMenu);
+  $('#btn-tunnels').addEventListener('click', () => openTunnels());
   $('#btn-settings').addEventListener('click', openSettings);
   $('#palette-input').addEventListener('input', () => {
     paletteIndex = 0;
