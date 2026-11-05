@@ -34,6 +34,16 @@ function createWindow() {
       sandbox: false,
     },
   });
+  // La portable tourne depuis un dossier temporaire effacé à la fermeture : sans ça, une épingle viserait ce dossier.
+  const portable = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (isWin && portable) {
+    win.setAppDetails({
+      appId: 'com.jonasmelheb.younesh',
+      appIconPath: portable,
+      relaunchCommand: `"${portable}"`,
+      relaunchDisplayName: 'Younesh',
+    });
+  }
   if (bounds.maximized) win.maximize();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 

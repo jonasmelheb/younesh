@@ -590,6 +590,14 @@ function showExitBar(id, code) {
 }
 
 function terminalKey(e, id) {
+  // Maj+Entrée = retour à la ligne dans Claude Code, aussi quand on l'a lancé à la main dans un shell.
+  // Ailleurs, on laisse passer la touche : Échap+Entrée effacerait la ligne de PowerShell.
+  if (e.key === 'Enter' && !e.altKey && (e.shiftKey || (!isMac() && e.ctrlKey)) && (sessionById(id)?.kind === 'claude' || runtime.get(id)?.inClaude)) {
+    // Sans preventDefault, xterm envoie aussi un Entrée au keypress qui suit, et Claude soumet la ligne.
+    e.preventDefault();
+    if (e.type === 'keydown') api.write(id, '\x1b\r');
+    return false;
+  }
   if (e.type !== 'keydown') return true;
   const term = runtime.get(id)?.term;
   const mod = isMac() ? e.metaKey : e.ctrlKey;
@@ -605,12 +613,6 @@ function terminalKey(e, id) {
   if (mod && !e.altKey && key === 'v') {
     e.preventDefault();
     term.paste(api.paste());
-    return false;
-  }
-  // Maj+Entrée = retour à la ligne dans Claude Code, aussi quand on l'a lancé à la main dans un shell.
-  // Ailleurs, Échap+Entrée effacerait la ligne de PowerShell : on laisse passer la touche.
-  if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.altKey && (sessionById(id)?.kind === 'claude' || runtime.get(id)?.inClaude)) {
-    api.write(id, '\x1b\r');
     return false;
   }
   if (isShortcut(e)) return false;
