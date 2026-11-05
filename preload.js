@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('younesh', {
   info: () => ipcRenderer.invoke('app:info'),
   pickFolder: (defaultPath) => ipcRenderer.invoke('dialog:folder', defaultPath),
   spawn: (opts) => ipcRenderer.invoke('pty:spawn', opts),
+  ptyCwd: (id) => ipcRenderer.invoke('pty:cwd', id),
   write: (id, data) => ipcRenderer.send('pty:write', id, data),
   resize: (id, cols, rows) => ipcRenderer.send('pty:resize', id, cols, rows),
   kill: (id) => ipcRenderer.send('pty:kill', id),

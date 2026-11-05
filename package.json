@@ -1,11 +1,12 @@
 {
   "name": "younesh",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Terminal pour Windows avec les discussions rangées dans des dossiers de couleur",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --x64 --publish never"
+    "dist": "electron-builder --win --x64 --publish never",
+    "icons": "node scripts/make-icons.js"
   },
   "author": "Y",
   "license": "MIT",
@@ -39,6 +40,7 @@
       "preload.js",
       "renderer/**",
       "build/icon.png",
+      "build/icon.ico",
       "!node_modules/@xterm/*/src/**",
       "!node_modules/**/*.map"
     ],
@@ -74,7 +76,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

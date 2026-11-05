@@ -14,7 +14,7 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 
 - `Younesh-Setup-x.y.z.exe` installs Younesh for the current user (no admin rights needed, Start menu shortcut). After that it updates itself: the new version downloads in the background and installs when you quit (can be turned off in Settings).
 - `Younesh-x.y.z.msi` is the same as an MSI package, handy for IT deployment or silent installs (`msiexec /i Younesh-x.y.z.msi /qn`). It does not update itself; Younesh tells you when a new version is out.
-- `Younesh-Portable-x.y.z.exe` runs without installing. It does not update itself, it only tells you when a new version is out.
+- `Younesh-Portable-x.y.z.exe` runs without installing. It updates itself: it downloads the new version and replaces its own .exe when you quit. If it can't (a protected folder, for example), it tells you when a new version is out.
 
 ## Features
 
@@ -57,6 +57,7 @@ Download from the [Releases](https://github.com/jonasmelheb/younesh/releases) pa
 | New folder | Ctrl+Shift+D |
 | Next / previous session | Ctrl+Tab / Ctrl+Shift+Tab |
 | Close session | Ctrl+Shift+W |
+| Reopen the last closed session | Ctrl+Shift+R |
 | Rename | F2 |
 | Find in terminal | Ctrl+Shift+F |
 | Jump to the session waiting for you | Ctrl+Shift+U |

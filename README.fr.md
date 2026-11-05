@@ -13,7 +13,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 1. Ouvre la page **Releases** du dépôt et télécharge :
    - `Younesh-Setup-x.y.z.exe` pour l'installer (raccourci dans le menu Démarrer). Ensuite, Younesh se met à jour tout seul : la nouvelle version se télécharge en arrière-plan et s'installe quand tu le fermes (case à décocher dans Réglages) ;
    - ou `Younesh-x.y.z.msi`, le même en .msi, pratique pour une installation par la DSI ou en silence (`msiexec /i Younesh-x.y.z.msi /qn`). Pas de mise à jour automatique avec lui : Younesh signale les nouvelles versions ;
-   - ou `Younesh-Portable-x.y.z.exe` pour le lancer sans installation. Celui-là ne se met pas à jour, il te signale juste qu'une nouvelle version est sortie.
+   - ou `Younesh-Portable-x.y.z.exe` pour le lancer sans installation. Il se met à jour tout seul : il télécharge la nouvelle version et remplace son .exe à la fermeture. S'il n'y arrive pas (dossier protégé par exemple), il signale la nouvelle version.
 2. L'app n'est pas signée, donc Windows affiche « Windows a protégé votre ordinateur ». Clique sur **Informations complémentaires**, puis **Exécuter quand même**.
 
 ## Ce que ça fait
@@ -57,6 +57,7 @@ Un terminal pour Windows où chaque discussion est rangée à gauche, dans des d
 | Nouveau dossier | Ctrl+Maj+D |
 | Discussion suivante / précédente | Ctrl+Tab / Ctrl+Maj+Tab |
 | Fermer la discussion | Ctrl+Maj+W |
+| Rouvrir la dernière discussion fermée | Ctrl+Maj+R |
 | Renommer | F2 |
 | Chercher dans le terminal | Ctrl+Maj+F |
 | Aller à la discussion qui attend | Ctrl+Maj+U |

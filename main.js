@@ -1,8 +1,9 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, net, shell: electronShell } = require('electron');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const pty = require('@lydell/node-pty');
 
 const isWin = process.platform === 'win32';
@@ -22,7 +23,7 @@ function createWindow() {
     minHeight: 400,
     backgroundColor: '#0e0f13',
     title: 'Younesh',
-    icon: path.join(__dirname, 'build', 'icon.png'),
+    icon: path.join(__dirname, 'build', isWin ? 'icon.ico' : 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: isWin ? { color: '#0e0f13', symbolColor: '#c9ccd6', height: 38 } : undefined,
     trafficLightPosition: { x: 14, y: 12 },
@@ -227,7 +228,15 @@ ipcMain.handle('dialog:file', async (_e, defaultPath) => {
 });
 
 // program : un programme lancé sans shell (ssh), cherché dans le Path relu.
-ipcMain.handle('pty:spawn', async (e, { id, shellPath, program, args, cwd, cols, rows }) => {
+// Dossier courant d'un terminal, lu sur son processus (Mac et Linux ; Windows passe par l'invite du shell).
+ipcMain.handle('pty:cwd', (_e, id) => new Promise((resolve) => {
+  const term = ptys.get(id);
+  if (!term || isWin) return resolve(null);
+  if (process.platform !== 'darwin') return fs.readlink(`/proc/${term.pid}/cwd`, (err, dir) => resolve(err ? null : dir));
+  execFile('lsof', ['-a', '-p', String(term.pid), '-d', 'cwd', '-Fn'], { timeout: 3000 }, (_err, out) => resolve(/^n(.+)$/m.exec(out || '')?.[1] || null));
+}));
+
+ipcMain.handle('pty:spawn', async (e, { id, shellPath, program, args, cwd, cols, rows, env: extraEnv }) => {
   const env = await freshEnv();
   ptys.get(id)?.kill();
   const dir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
@@ -236,7 +245,7 @@ ipcMain.handle('pty:spawn', async (e, { id, shellPath, program, args, cwd, cols,
     cols: cols || 80,
     rows: rows || 24,
     cwd: dir,
-    env: { ...env, TERM_PROGRAM: 'Younesh', COLORTERM: 'truecolor' },
+    env: { ...env, ...extraEnv, TERM_PROGRAM: 'Younesh', COLORTERM: 'truecolor' },
     useConpty: isWin ? true : undefined,
   });
   ptys.set(id, term);
@@ -306,8 +315,8 @@ ipcMain.handle('ssh:config', () => {
 });
 
 // Mises à jour depuis les versions GitHub. La version installée avec Younesh-Setup télécharge la nouvelle
-// en arrière-plan et l'installe à la fermeture. La portable et celle installée par le .msi (souvent par la DSI)
-// ne peuvent pas relancer cet installateur : on signale juste la sortie.
+// en arrière-plan et l'installe à la fermeture. La portable fait de même en remplaçant son propre .exe,
+// et signale juste la sortie si elle n'y arrive pas. Celle du .msi (souvent installée par la DSI) la signale aussi.
 let updater;
 function nsisUpdater() {
   if (!updater) {
@@ -316,6 +325,51 @@ function nsisUpdater() {
     updater.on('error', () => {});
   }
   return updater;
+}
+
+// Le nouvel .exe est posé à côté de l'ancien, après contrôle de l'empreinte publiée par GitHub.
+let portableUpdate = null;
+async function downloadPortable(release, tag) {
+  const asset = (release.assets || []).find((a) => a.name === `Younesh-Portable-${tag}.exe`);
+  const sha256 = /^sha256:([0-9a-f]{64})$/.exec(asset?.digest || '')?.[1];
+  if (!sha256) return false;
+  try {
+    const res = await net.fetch(asset.browser_download_url);
+    if (!res.ok) return false;
+    const data = Buffer.from(await res.arrayBuffer());
+    if (crypto.createHash('sha256').update(data).digest('hex') !== sha256) return false;
+    const target = process.env.PORTABLE_EXECUTABLE_FILE;
+    const file = `${target}.download`;
+    fs.writeFileSync(file, data);
+    portableUpdate = { file, target, version: tag };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Le .exe est verrouillé tant que Younesh tourne : un petit script attend sa fermeture pour le remplacer.
+function applyPortableUpdate(relaunch) {
+  const { file, target } = portableUpdate;
+  portableUpdate = null;
+  const quote = (p) => `"${p.replace(/%/g, '%%')}"`;
+  const script = path.join(os.tmpdir(), `younesh-update-${process.pid}.cmd`);
+  fs.writeFileSync(script, [
+    '@echo off',
+    'chcp 65001 >nul',
+    'set /a tries=0',
+    ':retry',
+    `move /y ${quote(file)} ${quote(target)} >nul 2>&1 && goto done`,
+    'set /a tries+=1',
+    'if %tries% geq 60 goto end',
+    'ping -n 2 127.0.0.1 >nul',
+    'goto retry',
+    ':done',
+    ...(relaunch ? [`start "" ${quote(target)}`] : []),
+    ':end',
+    '(goto) 2>nul & del "%~f0"',
+  ].join('\r\n'));
+  spawn('cmd.exe', ['/d', '/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
 }
 
 function newer(a, b) {
@@ -335,13 +389,24 @@ ipcMain.handle('update:check', async () => {
   }
   try {
     const res = await net.fetch('https://api.github.com/repos/jonasmelheb/younesh/releases/latest');
-    const tag = String((await res.json()).tag_name || '').replace(/^v/, '');
-    return tag && newer(tag, app.getVersion()) ? tag : null;
+    const release = await res.json();
+    const tag = String(release.tag_name || '').replace(/^v/, '');
+    if (!tag || !newer(tag, app.getVersion())) return null;
+    if (!process.env.PORTABLE_EXECUTABLE_FILE) return tag;
+    if (portableUpdate?.version === tag) return null;
+    if (!(await downloadPortable(release, tag))) return tag;
+    if (win && !win.isDestroyed()) win.webContents.send('update:ready', tag);
+    return null;
   } catch {
     return null;
   }
 });
-ipcMain.on('update:install', () => nsisUpdater().quitAndInstall(true, true));
+ipcMain.on('update:install', () => {
+  if (!portableUpdate) return nsisUpdater().quitAndInstall(true, true);
+  applyPortableUpdate(true);
+  app.quit();
+});
+app.on('will-quit', () => portableUpdate && applyPortableUpdate(false));
 ipcMain.handle('file:openJson', async () => {
   const res = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
   return res.canceled ? null : fs.readFileSync(res.filePaths[0], 'utf8');

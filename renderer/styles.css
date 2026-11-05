@@ -178,17 +178,9 @@ button.danger { color: var(--danger); }
 
 .sidebar-bottom { padding: 6px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 4px; }
 .sidebar-bottom button.ghost { width: auto; flex: 1; }
-.signature {
-  font-family: "Segoe Script", "Brush Script MT", "Snell Roundhand", cursive;
-  font-size: 22px;
-  line-height: 1;
-  padding: 0 10px 2px;
-  background: linear-gradient(135deg, #7c9cff, #f472b6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  cursor: default;
-}
+.app-version { color: var(--muted); font-size: 11px; white-space: nowrap; padding: 0 4px; }
+/* Le Y est dessiné, pas écrit : aucune police manuscrite n'existe à la fois sur Windows et sur macOS. */
+.signature { display: inline-flex; padding: 0 8px; cursor: default; }
 
 #resizer { width: 4px; margin-left: -2px; cursor: col-resize; z-index: 2; }
 #resizer:hover, #resizer.active { background: var(--accent); }
@@ -383,6 +375,18 @@ textarea.code:focus { border-color: var(--accent); }
 .sbx-item .kind { color: #2dd4bf; width: 16px; text-align: center; flex-shrink: 0; }
 .sbx-item .info { display: flex; flex-direction: column; min-width: 0; }
 .sbx-item .sub { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sbx-item .info { flex: 1; }
+.sbx-badge { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; font-size: 11px; color: var(--bg); background: #2dd4bf; }
+.sbx-filter { width: 100%; margin-bottom: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; outline: none; color: var(--text); }
+.sbx-filter:focus { border-color: var(--accent); }
+.install-row { display: flex; align-items: center; gap: 4px; }
+.install-row .check { flex: 1; min-width: 0; margin-bottom: 0; padding: 3px 0; }
+.install-row input { width: auto; flex: none; }
+.install-row button.ghost { width: auto; flex: none; padding: 2px 7px; }
+.install-add { align-self: flex-start; margin-top: 4px; }
+.install-editor { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+.install-editor textarea { width: 100%; min-height: 72px; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; outline: none; font-family: Consolas, Menlo, monospace; font-size: 12px; }
+.install-editor .row { justify-content: flex-end; }
 #toast button { margin-left: 12px; }
 .secret-layer { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
 .secret-box { width: min(420px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 14px; padding: 20px; box-shadow: 0 24px 64px rgba(0,0,0,.6); }

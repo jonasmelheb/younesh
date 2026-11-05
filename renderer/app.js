@@ -65,6 +65,7 @@ async function init() {
     activeId: stored.activeId || null,
     settings: stored.settings || {},
     tunnels: stored.tunnels || [],
+    closed: stored.closed || [],
   };
   document.documentElement.style.setProperty('--sidebar-w', settings().sidebarWidth + 'px');
   applyAppearance();
@@ -77,6 +78,7 @@ async function init() {
     const rt = runtime.get(id);
     if (!rt) return;
     rt.term.write(data);
+    sbxWatchInstall(id, data);
     const now = Date.now();
     rt.lastOutput = now;
     // L'écho des touches et le redessin après un redimensionnement ne comptent pas comme du travail.
@@ -110,6 +112,9 @@ async function init() {
   window.addEventListener('focus', () => clearAttention(state.activeId));
 
   bindUI();
+  watchScreenScale();
+  if (info.platform !== 'win32') setInterval(pollCwds, 5000);
+  $('#app-version').textContent = `v${info.version}`;
   render();
   applySshUi();
   if (sshEnabled()) startAutoTunnels();
@@ -124,6 +129,26 @@ async function init() {
 
 // ---------- Terminaux ----------
 
+// xterm arrondit la largeur des cases vers le bas : sur un écran sans haute densité, Menlo passe de 8,4 à 8 pixels
+// et les lettres se touchent. Un pixel de plus quand la perte est visible (letterSpacing est en pixels réels).
+function cellSpacing(st) {
+  const dpr = window.devicePixelRatio || 1;
+  if (dpr >= 2) return 0;
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = `${st.fontSize}px ${st.fontFamily}`;
+  const width = ctx.measureText('W').width * dpr;
+  return width - Math.floor(width) >= 0.25 ? 1 : 0;
+}
+
+// La fenêtre change d'écran : la densité change, l'espacement aussi.
+function watchScreenScale() {
+  matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change', () => {
+    // À l'image suivante : xterm doit d'abord prendre en compte la nouvelle densité, sinon le nombre de colonnes est faux.
+    requestAnimationFrame(applyFont);
+    watchScreenScale();
+  }, { once: true });
+}
+
 function ensureTerminal(s) {
   let rt = runtime.get(s.id);
   if (rt) return rt;
@@ -131,6 +156,8 @@ function ensureTerminal(s) {
   const term = new Terminal({
     fontFamily: st.fontFamily,
     fontSize: st.fontSize,
+    letterSpacing: cellSpacing(st),
+    minimumContrastRatio: 4.5,
     lineHeight: 1.15,
     cursorBlink: st.cursorBlink,
     cursorStyle: st.cursorStyle,
@@ -226,10 +253,37 @@ function enableGpu(term) {
   } catch {}
 }
 
+// Un terminal classique rouvre là où il en était. Claude reste dans son dossier d'origine, dont dépend la reprise.
+function followsCwd(s) {
+  return s.kind === 'shell' && !s.helper && !s.command?.trim();
+}
+
+// À chaque invite, le shell annonce son dossier (OSC 9;9), ce que PowerShell, cmd et Git Bash ne font pas seuls.
+// Hors de Windows, zsh ne peut pas être configuré de l'extérieur : le dossier est lu sur son processus.
+const PS_ANNOUNCE_CWD = "$global:__younesh_prompt=$function:prompt;function global:prompt{try{if($PWD.Provider.Name -eq 'FileSystem'){[Console]::Write('{0}]9;9;{1}{0}\\' -f [char]27,$PWD.ProviderPath)}}catch{};& $global:__younesh_prompt}";
+
+function announceCwd(shell) {
+  if (shell.family === 'powershell') return { args: [...shell.args, '-NoExit', '-Command', PS_ANNOUNCE_CWD] };
+  if (shell.family === 'cmd') return { args: shell.args, env: { PROMPT: '$e]9;9;$P$e\\$P$G' } };
+  if (shell.id === 'gitbash') return { args: shell.args, env: { PROMPT_COMMAND: "printf '\\033]9;9;%s\\033\\\\' \"$(pwd -W)\"" } };
+  return { args: shell.args };
+}
+
+async function pollCwds() {
+  for (const s of state.sessions) {
+    if (followsCwd(s) && runtime.get(s.id)?.running) setLiveCwd(s.id, await api.ptyCwd(s.id));
+  }
+}
+
 function setLiveCwd(id, dir) {
   const rt = runtime.get(id);
   if (!rt || !dir || rt.cwd === dir) return;
   rt.cwd = dir;
+  const s = sessionById(id);
+  if (s && followsCwd(s) && s.cwd !== dir) {
+    s.cwd = dir;
+    save();
+  }
   refreshBranches();
   if (id === state.activeId) updateTopbar();
 }
@@ -304,6 +358,7 @@ function paletteActions() {
     { label: 'Discussion qui attend', hint: 'Ctrl+Maj+U', run: jumpToAttention },
     { label: 'Renommer la discussion', hint: 'F2', run: () => state.activeId && startRename('session', state.activeId) },
     { label: 'Fermer la discussion', hint: 'Ctrl+Maj+W', run: () => state.activeId && closeSession(state.activeId) },
+    { label: 'Rouvrir la dernière discussion fermée', hint: 'Ctrl+Maj+R', run: reopenClosed },
     { label: 'Afficher ou masquer la barre latérale', hint: 'Ctrl+Maj+B', run: toggleSidebar },
     { label: 'Réglages', run: openSettings },
     { label: 'Exporter mes dossiers et réglages', run: exportBackup },
@@ -441,7 +496,7 @@ function collectBuffers() {
     const s = sessionById(id);
     if (s?.kind === 'shell' || s?.kind === 'ssh') out[id] = rt.serialize.serialize({ scrollback: RESTORE_LINES });
   }
-  for (const id of Object.keys(out)) if (!sessionById(id)) delete out[id];
+  for (const id of Object.keys(out)) if (!sessionById(id) && !state.closed.some((c) => c.id === id)) delete out[id];
   return out;
 }
 
@@ -462,7 +517,7 @@ function startupCommand(s, shell) {
     const fresh = `claude --session-id ${s.claudeId}${extra}`;
     return shell.family === 'powershell' ? `${resume}; if (-not $?) { ${fresh} }` : `${resume} || ${fresh}`;
   }
-  if (s.kind === 'sandbox' && s.sbx) return sbxStartup(s);
+  if (s.kind === 'sandbox' && s.sbx) return sbxStartup(s, shell);
   if (s.kind === 'sandbox') {
     const tpl = settings().sandboxCommand?.trim();
     return tpl ? tpl.replaceAll('{dossier}', `"${s.cwd}"`) : null;
@@ -487,7 +542,9 @@ async function startSession(s) {
     return;
   }
   // Une connexion SSH lance ssh sans shell autour : quand elle se ferme, la barre propose de se reconnecter.
-  const run = s.kind === 'ssh' ? { program: 'ssh', args: sshArgs(s.ssh), cwd: info.home } : { shellPath: shell.path, args: shellArgs(shell, startupCommand(s, shell)), cwd: s.cwd };
+  const run = s.kind === 'ssh' ? { program: 'ssh', args: sshArgs(s.ssh), cwd: info.home }
+    : followsCwd(s) ? { shellPath: shell.path, cwd: s.cwd, ...announceCwd(shell) }
+    : { shellPath: shell.path, args: shellArgs(shell, startupCommand(s, shell)), cwd: s.cwd };
   safeFit(rt);
   rt.running = true;
   rt.exited = false;
@@ -688,6 +745,11 @@ function closeSession(id, force) {
   if ((running || linked.length) && !confirm(`Fermer « ${s.name} » ?${running ? ' Le processus en cours sera arrêté.' : ''}${linked.length ? ` Ses ${linked.length} tunnel(s) seront supprimés.` : ''}`)) return;
   linked.forEach(deleteTunnel);
   api.kill(id);
+  const canReopen = !s.helper && !s.sbx?.removed;
+  if (canReopen) {
+    rememberClosed(s, rt);
+    toast(`« ${s.name} » est fermée.`, 8000, { label: 'Rouvrir', run: reopenClosed });
+  }
   if (rt) {
     rt.term.dispose();
     rt.el.remove();
@@ -711,6 +773,25 @@ function closeSession(id, force) {
     if (next && next !== id) activate(next);
     else showEmpty();
   }
+  render();
+  save();
+}
+
+const CLOSED_MAX = 10;
+
+function rememberClosed(s, rt) {
+  if (rt && settings().restore && (s.kind === 'shell' || s.kind === 'ssh')) savedBuffers[s.id] = rt.serialize.serialize({ scrollback: RESTORE_LINES });
+  state.closed.push(s);
+  for (const old of state.closed.splice(0, Math.max(0, state.closed.length - CLOSED_MAX))) delete savedBuffers[old.id];
+}
+
+// Rouvre le dernier onglet fermé : son dossier, sa conversation Claude ou sa sandbox.
+function reopenClosed() {
+  const s = state.closed.pop();
+  if (!s) return toast('Aucune discussion fermée à rouvrir.');
+  if (s.folderId && !folderById(s.folderId)) s.folderId = null;
+  state.sessions.push(s);
+  activate(s.id);
   render();
   save();
 }
@@ -1344,7 +1425,7 @@ function openSettings() {
       <label class="field"><span>Historique (lignes gardées par terminal)</span><input name="scrollback" type="number" min="1000" max="100000" step="1000" value="${st.scrollback}"></label>
       <label class="check"><input type="checkbox" name="restore" ${st.restore ? 'checked' : ''}> Retrouver le contenu des terminaux au redémarrage</label>
       <label class="check"><input type="checkbox" name="notify" ${st.notify ? 'checked' : ''}> Notification Windows quand Claude attend ta réponse</label>
-      <label class="check"><input type="checkbox" name="autoUpdate" ${st.autoUpdate ? 'checked' : ''}> Mettre à jour Younesh automatiquement (installé avec Younesh-Setup ; la portable et le .msi signalent les nouvelles versions)</label>
+      <label class="check"><input type="checkbox" name="autoUpdate" ${st.autoUpdate ? 'checked' : ''}> Mettre à jour Younesh automatiquement (Younesh-Setup et la portable ; le .msi signale les nouvelles versions)</label>
       <label class="check"><input type="checkbox" name="ssh" ${st.ssh ? 'checked' : ''}> Activer SSH : connexions aux serveurs et tunnels (redirection de ports)</label>
       <label class="check"><input type="checkbox" name="gpu" ${st.gpu ? 'checked' : ''}> Accélération graphique (plus fluide, à décocher en cas d'affichage bizarre)</label>
       <small style="color:var(--muted)">Raccourcis : Ctrl+Maj+P sélecteur rapide · Ctrl+Maj+T discussion · Ctrl+Maj+N Claude · Ctrl+Maj+Q terminal dans le dossier personnel · Ctrl+Maj+D dossier · Ctrl+Tab suivante · Ctrl+Maj+W fermer · F2 renommer · Ctrl+Maj+F chercher dans le terminal · Ctrl+Maj+B barre latérale · Ctrl+Maj+U discussion qui attend · Ctrl+Maj+E côte à côte · Ctrl +/− taille</small>
@@ -1389,6 +1470,7 @@ function applyFont() {
   for (const rt of runtime.values()) {
     rt.term.options.fontSize = st.fontSize;
     rt.term.options.fontFamily = st.fontFamily;
+    rt.term.options.letterSpacing = cellSpacing(st);
     rt.term.options.scrollback = st.scrollback;
     safeFit(rt);
   }
@@ -1489,7 +1571,7 @@ function isShortcut(e) {
   if (e.ctrlKey && e.key === 'Tab') return true;
   if (e.key === 'F2') return true;
   if (mod && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) return true;
-  if (mod && e.shiftKey && ['t', 'n', 'q', 'd', 'w', 'f', 'b', 'u', 'p', 'e'].includes(key)) return true;
+  if (mod && e.shiftKey && ['t', 'n', 'q', 'd', 'w', 'r', 'f', 'b', 'u', 'p', 'e'].includes(key)) return true;
   if (e.ctrlKey && (e.key === 'PageDown' || e.key === 'PageUp')) return true;
   return false;
 }
@@ -1517,6 +1599,7 @@ function handleShortcut(e) {
   if (key === 'q') return homeTerminal();
   if (key === 'd') return createFolder();
   if (key === 'w') return state.activeId && closeSession(state.activeId);
+  if (key === 'r') return reopenClosed();
   if (key === 'f') return openFind();
   if (key === 'b') return toggleSidebar();
   if (key === 'u') return jumpToAttention();
