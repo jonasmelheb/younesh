@@ -55,8 +55,17 @@ function base64(str) {
 // fichier pour garder le clavier (sudo, questions éventuelles).
 const SBX_INSTALL_DONE = '==> Installation terminée.';
 
+// La commande s'exécute déjà dans la sandbox, où sbx n'existe pas. Celle copiée depuis une doc arrive souvent
+// emballée (« sbx exec -it nom bash -lc '…' ») : seul l'intérieur est gardé, aussi pour celles déjà enregistrées.
+function sbxInnerScript(script) {
+  return script.split('\n').map((line) => {
+    const inShell = /^\s*sbx\s+exec\s+(?:-\S+\s+)*\S+\s+(?:bash|sh)\s+-l?c\s+(['"])(.*)\1\s*$/.exec(line);
+    return inShell ? inShell[2] : line.replace(/^\s*sbx\s+exec\s+(?:-\S+\s+)*\S+\s+/, '');
+  }).join('\n');
+}
+
 function sbxInstallCommand(projet, items) {
-  const lines = ['set -e', ...items.flatMap((it) => [`echo; echo "==> ${it.label.replace(/"/g, '')}"`, it.script]), `echo; echo "${SBX_INSTALL_DONE} Relance Claude : clic droit sur la sandbox, Rouvrir Claude."`];
+  const lines = ['set -e', ...items.flatMap((it) => [`echo; echo "==> ${it.label.replace(/"/g, '')}"`, sbxInnerScript(it.script)]), `echo; echo "${SBX_INSTALL_DONE} Relance Claude : clic droit sur la sandbox, Rouvrir Claude."`];
   const script = `echo ${base64(lines.join('\n'))} | base64 -d > /tmp/younesh-install.sh && bash /tmp/younesh-install.sh`;
   return sbxFill(sbxConfig().cli.exec, { projet, script });
 }

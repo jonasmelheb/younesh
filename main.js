@@ -380,9 +380,9 @@ function newer(a, b) {
 }
 
 ipcMain.handle('update:check', async () => {
-  if (!isWin || !app.isPackaged) return null;
-  // Seul l'installateur .exe laisse son désinstalleur à côté de Younesh.exe.
-  const fromSetup = !process.env.PORTABLE_EXECUTABLE_DIR && fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall Younesh.exe'));
+  if (!app.isPackaged) return null;
+  // Seul l'installateur .exe laisse son désinstalleur à côté de Younesh.exe. Sur Mac, Younesh signale la nouvelle version.
+  const fromSetup = isWin && !process.env.PORTABLE_EXECUTABLE_DIR && fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall Younesh.exe'));
   if (fromSetup) {
     nsisUpdater().checkForUpdates().catch(() => {});
     return null;

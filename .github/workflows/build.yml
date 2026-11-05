@@ -1,4 +1,4 @@
-name: Windows
+name: Publication
 
 on:
   push:
@@ -56,3 +56,41 @@ jobs:
         run: |
           shopt -s nullglob
           gh release create "$GITHUB_REF_NAME" dist/*.exe dist/*.msi dist/*.blockmap dist/latest.yml --title "Younesh $GITHUB_REF_NAME" --notes "Télécharge **Younesh-Setup** (installation, se met à jour toute seule), **Younesh-x.y.z.msi** (installation par la DSI ou msiexec) ou **Younesh-Portable** (sans installation, se met à jour toute seule)."
+
+  # Signé et validé par Apple dès que les secrets sont ajoutés au dépôt. Chaque processeur a son paquet node-pty.
+  mac:
+    needs: build
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    env:
+      SIGN: ${{ secrets.CSC_LINK != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.SIGN == 'true'
+      - uses: actions/setup-node@v4
+        if: env.SIGN == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: env.SIGN == 'true'
+      - name: Construire, signer et faire valider par Apple
+        if: env.SIGN == 'true'
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Ajouter à la version
+        if: env.SIGN == 'true' && startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.dmg

@@ -1,12 +1,13 @@
 {
   "name": "younesh",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Terminal pour Windows avec les discussions rangées dans des dossiers de couleur",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win --x64 --publish never",
-    "icons": "node scripts/make-icons.js"
+    "icons": "node scripts/make-icons.js",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "author": "Y",
   "license": "MIT",
@@ -98,6 +99,25 @@
       "fr",
       "en-US"
     ],
-    "compression": "maximum"
+    "compression": "maximum",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg"
+        }
+      ],
+      "artifactName": "Younesh-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSDocumentsFolderUsageDescription": "Les terminaux de Younesh travaillent dans tes documents.",
+        "NSDesktopFolderUsageDescription": "Les terminaux de Younesh travaillent sur ton bureau.",
+        "NSDownloadsFolderUsageDescription": "Les terminaux de Younesh travaillent dans tes téléchargements."
+      }
+    }
   }
 }
