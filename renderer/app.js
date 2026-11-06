@@ -232,6 +232,12 @@ function ensureTerminal(s) {
     if (kind === 'notify') attention(s.id, body || title);
     return true;
   });
+  // Une application peut remplir le presse-papiers (OSC 52) : Claude Code le fait à chaque sélection à la souris.
+  term.parser.registerOscHandler(52, (data) => {
+    const text = clipboardFromOsc(data);
+    if (text !== null) api.copy(text);
+    return true;
+  });
   term.parser.registerOscHandler(99, (text) => (attention(s.id, text.split(';').pop()), true));
   term.onTitleChange((title) => {
     // Claude Code tourne dans ce terminal tant que son titre commence par son symbole (« ✳ … ») ; il le vide en quittant.
@@ -587,6 +593,17 @@ function showExitBar(id, code) {
   const close = button('Fermer', '', () => closeSession(id, true));
   bar.append(restart, close);
   rt.el.appendChild(bar);
+}
+
+// Écriture seule : la demande de lecture (« ? ») reste sans réponse, un programme ne lit jamais le presse-papiers.
+function clipboardFromOsc(data) {
+  const m = /^(c?);([A-Za-z0-9+/]+={0,2})$/.exec(data);
+  if (!m) return null;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)));
+  } catch {
+    return null;
+  }
 }
 
 function terminalKey(e, id) {
