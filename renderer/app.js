@@ -1028,12 +1028,21 @@ function updateDot(id) {
   if (id === state.activeId) setDot($('#active-dot'), id);
 }
 
-// Claude affiche « API Usage Billing » quand il est connecté par clé d'API et non par l'abonnement :
-// on propose une fois de taper /login dans cet onglet.
+// Claude connecté par clé d'API et non par l'abonnement : on propose une fois de taper /login dans cet onglet.
+// Les anciennes versions affichent « API Usage Billing », les récentes « … · Claude API » dans l'en-tête
+// (« Opus 5 with medium effort · Claude API »), là où un abonnement affiche « · Claude Pro » ou « · Claude Max ».
+const API_BILLING = /API Usage Billing|·\s*Claude\s*API(?![\w-])/;
+const CURSOR_RIGHT = /\x1b\[\d*C/g;
+
+// Le terminal avance parfois le curseur au lieu d'écrire des espaces : on les remet avant de chercher.
+function apiBilling(output) {
+  return API_BILLING.test(output.replace(CURSOR_RIGHT, ' ').replace(ESCAPES, ''));
+}
+
 function watchApiBilling(s, rt, data) {
   if (!s || rt.loginOffered || !(s.kind === 'claude' || s.kind === 'sandbox')) return;
   rt.billTail = ((rt.billTail || '') + data).slice(-300);
-  if (!rt.billTail.replace(ESCAPES, '').includes('API Usage Billing')) return;
+  if (!apiBilling(rt.billTail)) return;
   rt.loginOffered = true;
   toast(`« ${s.name} » : Claude est facturé à l'API, pas sur ton abonnement.`, 60000, {
     label: 'Taper /login',
