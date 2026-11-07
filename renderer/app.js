@@ -569,7 +569,8 @@ async function startSession(s) {
   rt.exited = false;
   updateDot(s.id);
   try {
-    await api.spawn({ id: s.id, ...run, cols: rt.term.cols, rows: rt.term.rows });
+    // sandbox : sous Windows, main.js surveille les git bloqués tant que ce terminal tourne.
+    await api.spawn({ id: s.id, ...run, cols: rt.term.cols, rows: rt.term.rows, sandbox: s.kind === 'sandbox' });
     if (s.kind === 'sandbox' && s.sbx) sbxShowLoading(rt, s.sbx.created ? 'Démarrage de la sandbox' : 'Création de la sandbox');
     if (s.kind === 'claude' && !s.claudeStarted) {
       s.claudeStarted = true;
