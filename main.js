@@ -450,6 +450,59 @@ ipcMain.on('pty:resize', (_e, id, cols, rows) => {
 });
 ipcMain.on('pty:kill', (_e, id) => ptys.get(id)?.kill());
 
+// ---------- sbx et git ----------
+
+ipcMain.handle('fs:hasGit', (_e, dir) => !!dir && fs.existsSync(path.join(dir, '.git')));
+
+// sbx garde la description de chaque sandbox dans …\DockerSandboxes\sandboxes\state\sandboxd\runtimes\<nom>.json :
+// « Spec.Template » est l'image. Seul ce champ est lu. null si le fichier est absent ou illisible.
+ipcMain.handle('sbx:image', (_e, projet) => {
+  if (!isWin || !/^[\w.-]+$/.test(projet || '')) return null;
+  const file = path.join(process.env.LOCALAPPDATA || '', 'DockerSandboxes', 'sandboxes', 'state', 'sandboxd', 'runtimes', `${projet}.json`);
+  try {
+    const t = JSON.parse(fs.readFileSync(file, 'utf8'))?.Spec?.Template;
+    return typeof t === 'string' ? t : '';
+  } catch {
+    return null;
+  }
+});
+
+// Sur certains PC Windows, des git restent suspendus dès leur lancement quand leur parent disparaît.
+// Celui de sbx garde alors .git\config.lock : le remote de la sandbox n'est pas posé et sbx attend, écran noir.
+// Un git orphelin qui n'a jamais tourné (moins de 20 ms de processeur) depuis 30 s est arrêté.
+const KILL_STUCK_GIT = `
+$all = Get-CimInstance Win32_Process
+$ids = @{}; foreach ($p in $all) { $ids[[int]$p.ProcessId] = $true }
+$old = (Get-Date).AddSeconds(-30)
+foreach ($p in $all) {
+  if ($p.Name -ne 'git.exe' -or $ids.ContainsKey([int]$p.ParentProcessId)) { continue }
+  if ($p.CreationDate -gt $old -or ($p.KernelModeTime + $p.UserModeTime) -ge 200000) { continue }
+  Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+}`;
+
+function killStuckGit() {
+  return new Promise((resolve) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', KILL_STUCK_GIT], { windowsHide: true, timeout: 30000 }, () => resolve()));
+}
+
+if (isWin) setInterval(killStuckGit, 15000);
+
+// « Git remote sandbox-NOM is not ready » : le remote est reposé ici, une fois le verrou parti.
+// La commande affichée par sbx n'est jamais exécutée : seuls le nom et le port, vérifiés, sont repris.
+ipcMain.handle('git:repairRemote', async (_e, dir, remote, port, repo) => {
+  if (!isWin || !/^sandbox-[\w.-]+$/.test(remote) || !/^\d{2,5}$/.test(port) || !/^[\w.-]+$/.test(repo) || !fs.existsSync(path.join(dir, '.git'))) return false;
+  const lock = path.join(dir, '.git', 'config.lock');
+  for (let i = 0; i < 24 && fs.existsSync(lock); i++) {
+    await killStuckGit();
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  if (fs.existsSync(lock)) return false;
+  const env = await freshEnv();
+  const git = (...args) => new Promise((resolve) => execFile('git', ['-C', dir, ...args], { windowsHide: true, timeout: 30000, env }, (err) => resolve(!err)));
+  return await git('config', '--replace-all', `remote.${remote}.url`, `git://127.0.0.1:${port}/${repo}`)
+    && await git('config', '--replace-all', `remote.${remote}.fetch`, `+refs/heads/*:refs/remotes/${remote}/*`)
+    && await git('config', '--add', `remote.${remote}.fetch`, `+refs/heads/*:refs/sandboxes/${remote.slice('sandbox-'.length)}/*`);
+});
+
 // Pas de menu par défaut : ses raccourcis (Ctrl+W, Ctrl+R…) voleraient les touches du terminal.
 // Nécessaire pour que les notifications Windows portent le nom de l'app.
 if (isWin) app.setAppUserModelId('com.jonasmelheb.younesh');
