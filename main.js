@@ -246,7 +246,7 @@ ipcMain.handle('pty:cwd', (_e, id) => new Promise((resolve) => {
   execFile('lsof', ['-a', '-p', String(term.pid), '-d', 'cwd', '-Fn'], { timeout: 3000 }, (_err, out) => resolve(/^n(.+)$/m.exec(out || '')?.[1] || null));
 }));
 
-ipcMain.handle('pty:spawn', async (e, { id, shellPath, program, args, cwd, cols, rows, env: extraEnv }) => {
+ipcMain.handle('pty:spawn', async (e, { id, shellPath, program, args, cwd, cols, rows, env: extraEnv, sandbox }) => {
   const env = await freshEnv();
   ptys.get(id)?.kill();
   const dir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
@@ -259,11 +259,13 @@ ipcMain.handle('pty:spawn', async (e, { id, shellPath, program, args, cwd, cols,
     useConpty: isWin ? true : undefined,
   });
   ptys.set(id, term);
+  watchSandbox(id, !!sandbox);
   term.onData((data) => !e.sender.isDestroyed() && e.sender.send('pty:data', id, data));
   // Seule la fin du processus actuel compte : un redémarrage remplace l'ancien sans le signaler.
   term.onExit(({ exitCode }) => {
     if (ptys.get(id) !== term) return;
     ptys.delete(id);
+    watchSandbox(id, false);
     if (!e.sender.isDestroyed()) e.sender.send('pty:exit', id, exitCode);
   });
   return { pid: term.pid, cwd: dir };
@@ -469,30 +471,54 @@ ipcMain.handle('sbx:image', (_e, projet) => {
 
 // Sur certains PC Windows, des git restent suspendus dès leur lancement quand leur parent disparaît.
 // Celui de sbx garde alors .git\config.lock : le remote de la sandbox n'est pas posé et sbx attend, écran noir.
-// Un git orphelin qui n'a jamais tourné (moins de 20 ms de processeur) depuis 30 s est arrêté.
-const KILL_STUCK_GIT = `
-$all = Get-CimInstance Win32_Process
-$ids = @{}; foreach ($p in $all) { $ids[[int]$p.ProcessId] = $true }
+// Un git orphelin qui n'a jamais tourné (moins de 20 ms de processeur) depuis 30 s est arrêté, s'il est apparu
+// après l'ouverture de la sandbox (« since », en ms) : les git plus anciens du PC ne sont jamais touchés.
+const stuckGitScript = (since) => `
+$since = [DateTimeOffset]::FromUnixTimeMilliseconds(${Math.floor(since)}).LocalDateTime
+$all = Get-CimInstance Win32_Process -Filter "Name = 'git.exe'"
 $old = (Get-Date).AddSeconds(-30)
 foreach ($p in $all) {
-  if ($p.Name -ne 'git.exe' -or $ids.ContainsKey([int]$p.ParentProcessId)) { continue }
-  if ($p.CreationDate -gt $old -or ($p.KernelModeTime + $p.UserModeTime) -ge 200000) { continue }
+  if ($p.CreationDate -lt $since -or $p.CreationDate -gt $old) { continue }
+  if (($p.KernelModeTime + $p.UserModeTime) -ge 200000) { continue }
+  if (Get-Process -Id $p.ParentProcessId -ErrorAction SilentlyContinue) { continue }
   Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
 }`;
 
-function killStuckGit() {
-  return new Promise((resolve) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', KILL_STUCK_GIT], { windowsHide: true, timeout: 30000 }, () => resolve()));
+// Une seule passe à la fois : sur un PC lent, PowerShell peut mettre plus de 15 s.
+let killing = null;
+function killStuckGit(since) {
+  killing ??= new Promise((resolve) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', stuckGitScript(since)], { windowsHide: true, timeout: 30000 }, () => {
+    killing = null;
+    resolve();
+  }));
+  return killing;
 }
 
-if (isWin) setInterval(killStuckGit, 15000);
+// Sandbox ouvertes : id du terminal → heure de lancement. Le nettoyage ne tourne que tant qu'il y en a une.
+const sandboxes = new Map();
+let gitTimer = null;
+const oldestSandbox = () => (sandboxes.size ? Math.min(...sandboxes.values()) : null);
+
+function watchSandbox(id, open) {
+  if (!isWin) return;
+  if (open) sandboxes.set(id, Date.now());
+  else sandboxes.delete(id);
+  if (sandboxes.size && !gitTimer) gitTimer = setInterval(() => killStuckGit(oldestSandbox()), 15000);
+  if (!sandboxes.size && gitTimer) {
+    clearInterval(gitTimer);
+    gitTimer = null;
+  }
+}
 
 // « Git remote sandbox-NOM is not ready » : le remote est reposé ici, une fois le verrou parti.
 // La commande affichée par sbx n'est jamais exécutée : seuls le nom et le port, vérifiés, sont repris.
 ipcMain.handle('git:repairRemote', async (_e, dir, remote, port, repo) => {
   if (!isWin || !/^sandbox-[\w.-]+$/.test(remote) || !/^\d{2,5}$/.test(port) || !/^[\w.-]+$/.test(repo) || !fs.existsSync(path.join(dir, '.git'))) return false;
   const lock = path.join(dir, '.git', 'config.lock');
+  // Le git qui tient le verrou est apparu après l'ouverture de la sandbox ; à défaut, dans les 10 dernières minutes.
+  const since = oldestSandbox() ?? Date.now() - 10 * 60000;
   for (let i = 0; i < 24 && fs.existsSync(lock); i++) {
-    await killStuckGit();
+    await killStuckGit(since);
     await new Promise((r) => setTimeout(r, 5000));
   }
   if (fs.existsSync(lock)) return false;
