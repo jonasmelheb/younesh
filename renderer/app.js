@@ -79,6 +79,10 @@ async function init() {
     if (!rt) return;
     rt.term.write(data);
     sbxWatchInstall(id, data);
+    const ses = sessionById(id);
+    sbxWatchLoading(rt, data);
+    sbxWatchGitRemote(ses, rt, data);
+    watchApiBilling(ses, rt, data);
     const now = Date.now();
     rt.lastOutput = now;
     // L'écho des touches et le redessin après un redimensionnement ne comptent pas comme du travail.
@@ -93,6 +97,7 @@ async function init() {
     if (!rt) return;
     rt.running = false;
     rt.exited = true;
+    sbxHideLoading(rt);
     showExitBar(id, code);
     updateDot(id);
   });
@@ -159,6 +164,8 @@ function ensureTerminal(s) {
     letterSpacing: cellSpacing(st),
     minimumContrastRatio: 4.5,
     lineHeight: 1.15,
+    // Lissage en gris, comme Windows Terminal : sans transparence, xterm dessine en ClearType (franges colorées).
+    allowTransparency: true,
     cursorBlink: st.cursorBlink,
     cursorStyle: st.cursorStyle,
     allowProposedApi: true,
@@ -208,6 +215,11 @@ function ensureTerminal(s) {
   term.onData((data) => {
     rt.lastInput = Date.now();
     clearAttention(s.id);
+    // Premier message envoyé dans une sandbox créée ici : --continue a désormais une conversation à reprendre.
+    if (s.sbx?.talked === false && data.includes('\r')) {
+      s.sbx.talked = true;
+      save();
+    }
     api.write(s.id, data);
   });
   term.onResize(({ cols, rows }) => {
@@ -515,7 +527,7 @@ function quotePosix(str) {
 }
 
 // Commande lancée à l'ouverture de la discussion, ou null pour un shell nu.
-function startupCommand(s, shell) {
+function startupCommand(s, shell, hasGit) {
   if (s.kind === 'claude') {
     const extra = s.claudeArgs ? ' ' + s.claudeArgs : '';
     if (!s.claudeStarted) return `claude --session-id ${s.claudeId}${extra}`;
@@ -523,7 +535,7 @@ function startupCommand(s, shell) {
     const fresh = `claude --session-id ${s.claudeId}${extra}`;
     return shell.family === 'powershell' ? `${resume}; if (-not $?) { ${fresh} }` : `${resume} || ${fresh}`;
   }
-  if (s.kind === 'sandbox' && s.sbx) return sbxStartup(s, shell);
+  if (s.kind === 'sandbox' && s.sbx) return sbxStartup(s, shell, hasGit);
   if (s.kind === 'sandbox') {
     const tpl = settings().sandboxCommand?.trim();
     return tpl ? tpl.replaceAll('{dossier}', `"${s.cwd}"`) : null;
@@ -547,16 +559,18 @@ async function startSession(s) {
     rt.term.writeln('\x1b[31mAucun shell trouvé sur ce PC.\x1b[0m');
     return;
   }
+  const hasGit = s.sbx && !s.sbx.created ? await api.hasGit(s.cwd) : undefined;
   // Une connexion SSH lance ssh sans shell autour : quand elle se ferme, la barre propose de se reconnecter.
   const run = s.kind === 'ssh' ? { program: 'ssh', args: sshArgs(s.ssh), cwd: info.home }
     : followsCwd(s) ? { shellPath: shell.path, cwd: s.cwd, ...announceCwd(shell) }
-    : { shellPath: shell.path, args: shellArgs(shell, startupCommand(s, shell)), cwd: s.cwd };
+    : { shellPath: shell.path, args: shellArgs(shell, startupCommand(s, shell, hasGit)), cwd: s.cwd };
   safeFit(rt);
   rt.running = true;
   rt.exited = false;
   updateDot(s.id);
   try {
     await api.spawn({ id: s.id, ...run, cols: rt.term.cols, rows: rt.term.rows });
+    if (s.kind === 'sandbox' && s.sbx) sbxShowLoading(rt, s.sbx.created ? 'Démarrage de la sandbox' : 'Création de la sandbox');
     if (s.kind === 'claude' && !s.claudeStarted) {
       s.claudeStarted = true;
       save();
@@ -1013,13 +1027,48 @@ function updateDot(id) {
   if (id === state.activeId) setDot($('#active-dot'), id);
 }
 
+// Claude affiche « API Usage Billing » quand il est connecté par clé d'API et non par l'abonnement :
+// on propose une fois de taper /login dans cet onglet.
+function watchApiBilling(s, rt, data) {
+  if (!s || rt.loginOffered || !(s.kind === 'claude' || s.kind === 'sandbox')) return;
+  rt.billTail = ((rt.billTail || '') + data).slice(-300);
+  if (!rt.billTail.replace(ESCAPES, '').includes('API Usage Billing')) return;
+  rt.loginOffered = true;
+  toast(`« ${s.name} » : Claude est facturé à l'API, pas sur ton abonnement.`, 60000, {
+    label: 'Taper /login',
+    run: () => {
+      activate(s.id);
+      api.write(s.id, '/login\r');
+    },
+  });
+}
+
+// Image d'une sandbox : celle choisie à la création, sinon celle que sbx a enregistrée (lue une fois par main.js).
+const sbxImages = new Map();
+
+function sbxImageLabel(s) {
+  const p = s.sbx.projet;
+  if (!sbxImages.has(p)) {
+    sbxImages.set(p, null);
+    api.sbxImage(p).then((img) => {
+      // Fiche absente (sandbox pas encore créée) : on réessaiera au prochain affichage.
+      if (img === null) sbxImages.delete(p);
+      else sbxImages.set(p, img);
+      if (img !== null && state.activeId === s.id) updateTopbar();
+    });
+  }
+  const img = sbxImages.get(p) ?? s.sbx.image ?? null;
+  return img === null ? 'non enregistrée' : img === '' ? 'par défaut' : img;
+}
+
 function updateTopbar() {
   const s = sessionById(state.activeId);
   $('#active-title').textContent = s ? s.name : '';
   const branch = s && !s.ssh && branches[cwdOf(s)];
   // SSH : le serveur, puis le dossier distant si son shell l'annonce (OSC 7).
   const remote = s?.ssh && runtime.get(s.id)?.cwd;
-  $('#active-path').textContent = !s ? '' : s.ssh ? sshLabel(s.ssh) + (remote ? `  ${remote}` : '') : shortPath(cwdOf(s)) + (branch ? `  ⎇ ${branch}` : '');
+  const sbx = s?.sbx ? `  ·  sbx : ${s.sbx.projet}  ·  image : ${sbxImageLabel(s)}` : '';
+  $('#active-path').textContent = !s ? '' : s.ssh ? sshLabel(s.ssh) + (remote ? `  ${remote}` : '') : shortPath(cwdOf(s)) + (branch ? `  ⎇ ${branch}` : '') + sbx;
   $('#active-dot').style.visibility = s ? 'visible' : 'hidden';
   if (s) setDot($('#active-dot'), s.id);
   document.title = s ? `${s.name} — Younesh` : 'Younesh';

@@ -70,15 +70,68 @@ function sbxInstallCommand(projet, items) {
   return sbxFill(sbxConfig().cli.exec, { projet, script });
 }
 
-function sbxStartup(s, shell) {
+function sbxStartup(s, shell, hasGit) {
   const cli = sbxConfig().cli;
   const vars = { projet: s.sbx.projet, dossier: `"${s.cwd}"` };
-  if (!s.sbx.created) return sbxFill(s.sbx.image === undefined ? cli.create : sbxCreateTemplate(cli.create, s.sbx.image), vars);
+  if (!s.sbx.created) {
+    const create = s.sbx.image === undefined ? cli.create : sbxCreateTemplate(cli.create, s.sbx.image);
+    // --clone copie un dépôt git : sans dépôt dans le dossier, la création échoue. On l'enlève.
+    return sbxFill(hasGit === false ? create.replace(/\s--clone\b/g, '') : create, vars);
+  }
   const open = sbxFill(cli.open, vars);
   if (open.includes(' -- ') || !/\bclaude\b/.test(cli.create)) return open;
+  // Sans message envoyé, pas de conversation : --continue échoue et la relance de secours reste bloquée (écran noir).
+  if (s.sbx.talked === false) return open;
   // Reprend la dernière conversation de la sandbox ; s'il n'y en a pas encore, Claude démarre normalement.
   const resume = `${open} -- --continue`;
   return shell.family === 'powershell' ? `${resume}; if (-not $?) { ${open} }` : `${resume} || ${open}`;
+}
+
+// Une sandbox existante met parfois une minute à démarrer, écran noir compris : une pastille l'indique
+// jusqu'à ce que Claude s'affiche, que le processus s'arrête, ou au bout de 5 minutes.
+const ESCAPES = /\x1b\[[0-9;?<>=]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+
+function sbxShowLoading(rt, what) {
+  sbxHideLoading(rt);
+  const pill = document.createElement('div');
+  pill.className = 'load-pill';
+  rt.el.appendChild(pill);
+  const start = Date.now();
+  const tick = () => {
+    const s = Math.floor((Date.now() - start) / 1000);
+    if (s >= 300) return sbxHideLoading(rt);
+    pill.textContent = `${what} ${['·  ', '·· ', '···'][s % 3]}  ${s} s`;
+  };
+  tick();
+  rt.loading = { pill, timer: setInterval(tick, 1000), tail: '' };
+}
+
+function sbxHideLoading(rt) {
+  if (!rt?.loading) return;
+  clearInterval(rt.loading.timer);
+  rt.loading.pill.remove();
+  rt.loading = null;
+}
+
+// L'en-tête « Claude Code » n'arrive pas toujours d'un bloc (reprise d'une conversation, espaces remplacés par des
+// déplacements du curseur) : la zone de saisie de Claude (lignes ─── et ❯) suffit aussi.
+function sbxWatchLoading(rt, data) {
+  if (!rt.loading) return;
+  rt.loading.tail = (rt.loading.tail + data).slice(-300);
+  const text = rt.loading.tail.replace(ESCAPES, '');
+  if (text.replace(/ /g, '').includes('ClaudeCode') || text.includes('───') || text.includes('❯')) sbxHideLoading(rt);
+}
+
+// « Git remote sandbox-NOM is not ready … git://127.0.0.1:PORT/DEPOT » : Younesh repose le remote lui-même (main.js).
+function sbxWatchGitRemote(s, rt, data) {
+  if (!s?.sbx || !s.cwd || info.platform !== 'win32') return;
+  rt.gitTail = ((rt.gitTail || '') + data).slice(-2000);
+  const nr = /Git remote (sandbox-[\w.-]+) is not ready/.exec(rt.gitTail);
+  const url = /git:\/\/127\.0\.0\.1:(\d{2,5})\/([\w.-]+)/.exec(rt.gitTail);
+  if (!nr || !url) return;
+  rt.gitTail = '';
+  api.repairGitRemote(s.cwd, nr[1], url[1], url[2])
+    .then((ok) => toast(ok ? `Remote git « ${nr[1]} » réparé.` : `La réparation du remote git « ${nr[1]} » a échoué.`, 8000));
 }
 
 // Discussion d'appoint (préparation du poste, installation…) : réutilisée si elle existe déjà.
@@ -236,7 +289,7 @@ function openSbxNew(preset = {}) {
 }
 
 function createSandbox(projet, dir, folderId, items, image) {
-  const s = createSession({ kind: 'sandbox', name: projet, cwd: dir, folderId, sbx: { projet, created: false, image } });
+  const s = createSession({ kind: 'sandbox', name: projet, cwd: dir, folderId, sbx: { projet, created: false, image, talked: false } });
   if (items.length) {
     const h = sbxHelper(`Installation · ${projet}`, dir, folderId, sbxInstallCommand(projet, items), false);
     moveSession(h.id, folderId, state.sessions.indexOf(s) + 1);
@@ -442,12 +495,40 @@ function validateSbx(cfg) {
   return null;
 }
 
+// JSON coloré : le texte est recopié en couleurs dans un <pre> placé sous la zone de saisie, dont le texte est transparent.
+const JSON_TOKEN = /("(?:[^"\\\n]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],:])/g;
+
+function colorJson(area, pre) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const paint = () => {
+    let html = '';
+    let last = 0;
+    for (const m of area.value.matchAll(JSON_TOKEN)) {
+      html += esc(area.value.slice(last, m.index));
+      const cls = m[1] ? (m[2] ? 'key' : 'str') : m[3] ? 'num' : m[4] ? 'lit' : 'pun';
+      const tok = cls === 'key' ? m[1] : m[0];
+      html += `<span class="j-${cls}">${esc(tok)}</span>` + (cls === 'key' ? esc(m[2]) : '');
+      last = m.index + m[0].length;
+    }
+    // Le \n final garde la même hauteur que la zone de saisie quand le texte finit par un retour à la ligne.
+    pre.innerHTML = html + esc(area.value.slice(last)) + '\n';
+    pre.scrollTop = area.scrollTop;
+    pre.scrollLeft = area.scrollLeft;
+  };
+  area.addEventListener('input', paint);
+  area.addEventListener('scroll', () => {
+    pre.scrollTop = area.scrollTop;
+    pre.scrollLeft = area.scrollLeft;
+  });
+  return paint;
+}
+
 function openSbxConfig() {
   openModal(`
     <h2>Configurer sbx</h2>
     <p class="hint"><b>cli</b> : les commandes sbx (à changer seulement si sbx évolue). <b>setup</b> : la préparation du poste. <b>installs</b> : ce qu'on peut installer dans une sandbox.<br>
     Variables : <code>{projet}</code>, <code>{dossier}</code>, <code>{script}</code>, <code>{secret:NOM}</code>.</p>
-    <textarea id="sbx-json" class="code" spellcheck="false"></textarea>
+    <div class="code-wrap"><pre class="code-hl" aria-hidden="true"></pre><textarea id="sbx-json" class="code" spellcheck="false" wrap="off"></textarea></div>
     <p class="hint" id="sbx-error"></p>
     <div class="modal-actions">
       <button type="button" id="import">Importer…</button>
@@ -460,7 +541,9 @@ function openSbxConfig() {
     modal.closest('#modal').classList.add('wide');
     const area = modal.querySelector('#sbx-json');
     const error = modal.querySelector('#sbx-error');
+    const paint = colorJson(area, modal.querySelector('.code-hl'));
     area.value = JSON.stringify(sbxConfig(), null, 2);
+    paint();
     const parse = () => {
       try {
         const cfg = JSON.parse(area.value);
@@ -477,11 +560,13 @@ function openSbxConfig() {
       if (text != null) {
         area.value = text;
         if (parse()) area.value = JSON.stringify(JSON.parse(text), null, 2);
+        paint();
       }
     });
     modal.querySelector('#export').addEventListener('click', () => parse() && api.saveJson('younesh-sbx.json', area.value));
     modal.querySelector('#reset').addEventListener('click', () => {
       area.value = JSON.stringify(SBX_DEFAULT, null, 2);
+      paint();
       parse();
     });
     modal.querySelector('#cancel').addEventListener('click', closeModal);
