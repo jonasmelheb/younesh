@@ -53,9 +53,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         # latest.yml (et la carte des blocs) servent à la mise à jour automatique de la version installée.
+        # Les notes reprennent le message du commit tagué : son titre en gras, puis son corps (Markdown accepté),
+        # sans les lignes Co-Authored-By, Claude-Session et Signed-off-by. Le texte d'installation suit toujours.
         run: |
           shopt -s nullglob
-          gh release create "$GITHUB_REF_NAME" dist/*.exe dist/*.msi dist/*.blockmap dist/latest.yml --title "Younesh $GITHUB_REF_NAME" --notes "Télécharge **Younesh-Setup** (installation, se met à jour toute seule), **Younesh-x.y.z.msi** (installation par la DSI ou msiexec) ou **Younesh-Portable** (sans installation, se met à jour toute seule)."
+          subject=$(git log -1 --format=%s HEAD)
+          body=$(git log -1 --format=%b HEAD | grep -viE '^(co-authored-by|claude-session|signed-off-by):' || true)
+          {
+            printf '**%s**\n\n' "$subject"
+            [ -n "${body//[[:space:]]/}" ] && printf '%s\n\n' "$body"
+            printf '## Installer\n\n'
+            printf '%s\n\n' "Télécharge **Younesh-Setup** (installation, se met à jour toute seule), **Younesh-x.y.z.msi** (installation par la DSI ou msiexec) ou **Younesh-Portable** (sans installation, se met à jour toute seule)."
+            printf '%s\n' "Déjà installé ? La mise à jour arrive toute seule."
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/*.exe dist/*.msi dist/*.blockmap dist/latest.yml --title "Younesh $GITHUB_REF_NAME" --notes-file notes.md
 
   # Signé et validé par Apple dès que les secrets sont ajoutés au dépôt. Chaque processeur a son paquet node-pty.
   mac:
