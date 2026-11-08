@@ -1041,8 +1041,11 @@ function apiBilling(output) {
 
 function watchApiBilling(s, rt, data) {
   if (!s || rt.loginOffered || !(s.kind === 'claude' || s.kind === 'sandbox')) return;
-  rt.billTail = ((rt.billTail || '') + data).slice(-300);
-  if (!apiBilling(rt.billTail)) return;
+  // Recherche sur tout le bloc reçu (l'en-tête arrive au début d'un bloc d'un millier de caractères) ;
+  // seule la fin est gardée, pour une mention coupée entre deux blocs.
+  const text = (rt.billTail || '') + data;
+  rt.billTail = text.slice(-300);
+  if (!apiBilling(text)) return;
   rt.loginOffered = true;
   toast(`« ${s.name} » : Claude est facturé à l'API, pas sur ton abonnement.`, 60000, {
     label: 'Taper /login',
