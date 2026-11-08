@@ -117,17 +117,21 @@ function sbxHideLoading(rt) {
 // déplacements du curseur) : la zone de saisie de Claude (lignes ─── et ❯) suffit aussi.
 function sbxWatchLoading(rt, data) {
   if (!rt.loading) return;
-  rt.loading.tail = (rt.loading.tail + data).slice(-300);
-  const text = rt.loading.tail.replace(ESCAPES, '');
+  // Recherche sur tout le bloc reçu, puis seule la fin est gardée pour le bloc suivant (comme watchApiBilling).
+  const raw = rt.loading.tail + data;
+  rt.loading.tail = raw.slice(-300);
+  const text = raw.replace(ESCAPES, '');
   if (text.replace(/ /g, '').includes('ClaudeCode') || text.includes('───') || text.includes('❯')) sbxHideLoading(rt);
 }
 
 // « Git remote sandbox-NOM is not ready … git://127.0.0.1:PORT/DEPOT » : Younesh repose le remote lui-même (main.js).
 function sbxWatchGitRemote(s, rt, data) {
   if (!s?.sbx || !s.cwd || info.platform !== 'win32') return;
-  rt.gitTail = ((rt.gitTail || '') + data).slice(-2000);
-  const nr = /Git remote (sandbox-[\w.-]+) is not ready/.exec(rt.gitTail);
-  const url = /git:\/\/127\.0\.0\.1:(\d{2,5})\/([\w.-]+)/.exec(rt.gitTail);
+  // Recherche sur tout le bloc reçu, puis seule la fin est gardée pour le bloc suivant (comme watchApiBilling).
+  const text = (rt.gitTail || '') + data;
+  rt.gitTail = text.slice(-2000);
+  const nr = /Git remote (sandbox-[\w.-]+) is not ready/.exec(text);
+  const url = /git:\/\/127\.0\.0\.1:(\d{2,5})\/([\w.-]+)/.exec(text);
   if (!nr || !url) return;
   rt.gitTail = '';
   api.repairGitRemote(s.cwd, nr[1], url[1], url[2])
