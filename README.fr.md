@@ -83,7 +83,9 @@ Electron, xterm.js et node-pty.
 
 ## Signature et confidentialité
 
-Voir la [version anglaise](README.md#code-signing-policy) : signature gratuite par SignPath Foundation, et aucune donnée envoyée sur internet.
+Voir la [Code signing policy](README.md#code-signing-policy) (en anglais) : signature gratuite par SignPath Foundation.
+
+Younesh n'envoie aucune donnée sans que tu le demandes, à une exception près : au démarrage, il demande à GitHub s'il existe une nouvelle version et la télécharge le cas échéant. Ces requêtes ne contiennent aucune donnée personnelle, seulement ce que porte toute requête HTTPS (comme ton adresse IP, vue par GitHub). Pour désactiver cette vérification, décoche **Mettre à jour Younesh automatiquement** dans les **Réglages**. Les connexions SSH, les tunnels et les sandbox ne vont que vers les serveurs que tu configures. Pas de télémétrie, pas de compte : tout reste dans un fichier sur ton ordinateur. Voir la [Privacy policy](README.md#privacy-policy) (en anglais).
 
 ## Licence
 

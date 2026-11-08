@@ -92,7 +92,11 @@ Every release is built from this repository by GitHub Actions; only those builds
 
 ## Privacy policy
 
-This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. Everything Younesh saves (folders, colors, sessions, settings) stays in a local file on the computer (`%APPDATA%\younesh`).
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with one exception: **update checks**.
+
+- **Update checks:** at startup, Younesh asks GitHub (`api.github.com` and `github.com`, release pages of this repository) whether a newer version exists, and downloads it if so. These requests contain no personal data, only what any HTTPS request carries (such as your IP address, seen by GitHub). Turn this off in **Réglages** by unchecking **Mettre à jour Younesh automatiquement**.
+- **Connections you open:** SSH sessions, tunnels and sandboxes connect only to the servers and services you configure.
+- **No telemetry, no account:** Younesh collects no usage data. Everything it saves (folders, colors, sessions, settings) stays in a local file on the computer (`%APPDATA%\younesh`).
 
 ## License
 
